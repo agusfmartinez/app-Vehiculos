@@ -1,0 +1,110 @@
+import { Fuel, Gauge } from 'lucide-react';
+import { Card, CardBody } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/cn';
+import { fmtFecha, fmtNumero } from '@/lib/format';
+import type { EstadoTanque } from '@/lib/calculos';
+
+const MOTIVOS: Record<string, string> = {
+  'sin-capacidad': 'Falta la capacidad del tanque en la ficha del vehículo.',
+  'sin-autonomia':
+    'Falta saber cuánto consume: hacen falta dos cargas con tanque lleno, o dos mediciones del medidor.',
+  'sin-referencia':
+    'No hay ningún nivel conocido todavía. Registrá una medición o una carga a tanque lleno.',
+};
+
+interface Props {
+  estado: EstadoTanque;
+  capacidad?: number;
+  onMedir: () => void;
+}
+
+/** Cuánta nafta queda ahora, deducida del último nivel conocido y los km hechos. */
+export function TanqueCard({ estado, capacidad, onMedir }: Props) {
+  const { litros, nivel, autonomiaRestante, referencia, kmDesdeReferencia, motivo } = estado;
+
+  if (motivo) {
+    return (
+      <Card>
+        <CardBody className="flex flex-col gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-carbon-400">
+            <Fuel size={13} />
+            Nafta en el tanque
+          </span>
+          <p className="text-sm text-carbon-400">{MOTIVOS[motivo]}</p>
+          <Button
+            variante="secundario"
+            tamanio="sm"
+            icono={<Gauge size={15} />}
+            onClick={onMedir}
+            className="self-start"
+          >
+            Medir tanque
+          </Button>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const pct = Math.round((nivel ?? 0) * 100);
+  // Bajo un cuarto de tanque el aviso pasa a ámbar; en reserva, a rojo.
+  const tono = pct <= 12 ? 'peligro' : pct <= 25 ? 'alerta' : 'ok';
+  const colorBarra =
+    tono === 'peligro' ? 'bg-rojo-500' : tono === 'alerta' ? 'bg-ambar-500' : 'bg-verde-500';
+  const colorTexto =
+    tono === 'peligro' ? 'text-rojo-500' : tono === 'alerta' ? 'text-ambar-400' : 'text-verde-500';
+
+  return (
+    <Card>
+      <CardBody className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-carbon-400">
+            <Fuel size={13} />
+            Nafta en el tanque
+          </span>
+          <Button
+            variante="fantasma"
+            tamanio="sm"
+            icono={<Gauge size={14} />}
+            onClick={onMedir}
+            className="-my-1"
+          >
+            Medir
+          </Button>
+        </div>
+
+        <div className="flex items-baseline gap-2">
+          <span className={cn('num text-3xl font-bold leading-none', colorTexto)}>
+            {fmtNumero(litros, 1)}
+          </span>
+          <span className="text-sm font-medium text-carbon-400">
+            L de {fmtNumero(capacidad)} L
+          </span>
+          <span className="num ml-auto text-sm font-semibold text-carbon-300">{pct}%</span>
+        </div>
+
+        <div className="h-3 w-full overflow-hidden rounded-full bg-carbon-700">
+          <div
+            className={cn('h-full rounded-full transition-[width]', colorBarra)}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-xs text-carbon-400">Alcanza para</span>
+          <span className="num text-sm font-semibold text-carbon-100">
+            ~{fmtNumero(autonomiaRestante)} km
+          </span>
+        </div>
+
+        {referencia ? (
+          <p className="border-t border-carbon-700 pt-2 text-xs text-carbon-500">
+            Estimado desde {referencia.tipo === 'carga' ? 'la carga' : 'la medición'} del{' '}
+            {fmtFecha(referencia.fecha)} · {fmtNumero(kmDesdeReferencia)} km recorridos desde
+            entonces. Registrá una medición para corregirlo.
+          </p>
+        ) : null}
+      </CardBody>
+    </Card>
+  );
+}
