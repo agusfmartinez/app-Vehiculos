@@ -7,6 +7,7 @@ import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
 import { Button, FabAgregar } from '@/components/ui/Button';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Badge, EmptyState } from '@/components/ui/EmptyState';
+import { Chips } from '@/components/ui/Chips';
 import { ConfirmarBorrado } from '@/components/ui/Modal';
 import { alertasServices, ordenarServicesDesc } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtNumero } from '@/lib/format';
@@ -63,25 +64,15 @@ export function ServicesPage() {
         subtitulo={`${todos.length} ${todos.length === 1 ? 'registro' : 'registros'} · ${fmtDinero(totalFiltrado)} en la vista actual`}
       />
 
-      {tipos.length > 1 ? (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-          {[{ v: TODOS, l: 'Todos' }, ...tipos.map((t) => ({ v: t, l: t }))].map(({ v, l }) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setFiltro(v)}
-              className={cn(
-                'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
-                filtro === v
-                  ? 'border-ambar-500 bg-ambar-500/15 text-ambar-300'
-                  : 'border-carbon-600 bg-carbon-800 text-carbon-300',
-              )}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <Chips
+        label="Filtrar por tipo de service"
+        valor={filtro}
+        onChange={setFiltro}
+        opciones={[
+          { valor: TODOS, label: 'Todos' },
+          ...tipos.map((t) => ({ valor: t, label: t })),
+        ]}
+      />
 
       {lista.length === 0 ? (
         <EmptyState

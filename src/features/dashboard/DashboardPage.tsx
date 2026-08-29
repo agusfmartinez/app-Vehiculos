@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Droplet,
   Fuel,
+  Route,
   ShieldCheck,
   TrendingUp,
   Wallet,
@@ -16,7 +17,7 @@ import { fmtDinero, fmtFecha, fmtKm, fmtNumero, textoDias } from '@/lib/format';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/EmptyState';
 import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
-import { KmActualCard } from '@/features/dashboard/KmActualCard';
+import { VehiculoCard } from '@/features/dashboard/VehiculoCard';
 
 const TONO_VTV: Record<EstadoVTV, 'ok' | 'alerta' | 'peligro' | 'neutro'> = {
   vigente: 'ok',
@@ -26,9 +27,21 @@ const TONO_VTV: Record<EstadoVTV, 'ok' | 'alerta' | 'peligro' | 'neutro'> = {
   'sin-datos': 'neutro',
 };
 
+const TONO_STAT_VTV: Record<EstadoVTV, 'normal' | 'ok' | 'alerta' | 'peligro'> = {
+  vigente: 'ok',
+  'por-vencer': 'alerta',
+  vencida: 'peligro',
+  rechazada: 'peligro',
+  'sin-datos': 'normal',
+};
+
 export function DashboardPage() {
-  const { activo, services, cargas, lecturas, vtv } = useDatos();
+  const { activo, services, cargas, lecturas, vtv, kmMaxRegistrado, kmMinRegistrado } =
+    useDatos();
   const navigate = useNavigate();
+
+  // El odómetro es derivado: nunca puede ir por detrás del registro más alto.
+  const kmOdometro = Math.max(activo?.kmActual ?? 0, kmMaxRegistrado);
 
   const r = useMemo(
     () =>
@@ -37,10 +50,10 @@ export function DashboardPage() {
         cargas,
         lecturas,
         vtv,
-        kmActual: activo?.kmActual ?? 0,
+        kmActual: kmOdometro,
         capacidad: activo?.capacidadTanque,
       }),
-    [services, cargas, lecturas, vtv, activo],
+    [services, cargas, lecturas, vtv, activo, kmOdometro],
   );
 
   const tanque = useMemo(
@@ -48,12 +61,18 @@ export function DashboardPage() {
       estadoTanque({
         cargas,
         lecturas,
-        kmActual: activo?.kmActual ?? 0,
+        kmActual: kmOdometro,
         capacidad: activo?.capacidadTanque,
         kmPorLitro: r.autonomia.kmPorLitro,
       }),
-    [cargas, lecturas, activo, r.autonomia.kmPorLitro],
+    [cargas, lecturas, activo, kmOdometro, r.autonomia.kmPorLitro],
   );
+
+  // Distancia cubierta por el historial: del registro más viejo al más nuevo.
+  const recorrido = useMemo(() => {
+    if (kmMinRegistrado == null || kmMaxRegistrado <= kmMinRegistrado) return null;
+    return { km: kmMaxRegistrado - kmMinRegistrado, desde: kmMinRegistrado };
+  }, [kmMinRegistrado, kmMaxRegistrado]);
 
   const anio = new Date().getFullYear();
   const mes = new Date().toLocaleDateString('es-AR', { month: 'long' });
@@ -62,7 +81,7 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <KmActualCard />
+      <VehiculoCard />
 
       {r.alertas.length > 0 ? (
         <Card className="border-ambar-500/40 bg-ambar-500/[0.07]">
@@ -89,47 +108,77 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      <Link to="/vtv" className="block">
-        <Card className="transition-colors hover:border-carbon-600">
-          <CardBody className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-carbon-400">
-                <ShieldCheck size={13} />
-                VTV
-              </span>
-              <span className="flex items-center gap-2">
-                <span
-                  className={
-                    'text-lg font-bold ' +
-                    (r.vtv.estado === 'vigente'
-                      ? 'text-verde-500'
-                      : r.vtv.estado === 'por-vencer'
-                        ? 'text-ambar-400'
-                        : r.vtv.estado === 'sin-datos'
-                          ? 'text-carbon-300'
-                          : 'text-rojo-500')
-                  }
-                >
-                  {r.vtv.etiqueta}
-                </span>
-                {r.vtv.diasRestantes != null ? (
-                  <Badge tono={TONO_VTV[r.vtv.estado]}>{textoDias(r.vtv.diasRestantes)}</Badge>
-                ) : null}
-              </span>
-              {r.vtv.registro ? (
-                <span className="num text-xs text-carbon-500">
-                  Vence {fmtFecha(r.vtv.registro.fechaVencimiento)}
-                </span>
-              ) : (
-                <span className="text-xs text-carbon-500">Cargá tu última VTV</span>
-              )}
-            </div>
-            <ChevronRight size={18} className="shrink-0 text-carbon-500" />
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/vtv" className="block">
+          <Card className="h-full transition-colors hover:border-carbon-600">
+            <CardBody>
+              <Stat
+                rotulo="VTV"
+                icono={<ShieldCheck size={13} />}
+                valor={<span className="text-xl">{r.vtv.etiqueta}</span>}
+                tono={TONO_STAT_VTV[r.vtv.estado]}
+                detalle={
+                  r.vtv.registro ? (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      Vence {fmtFecha(r.vtv.registro.fechaVencimiento)}
+                      {r.vtv.diasRestantes != null ? (
+                        <Badge tono={TONO_VTV[r.vtv.estado]}>
+                          {textoDias(r.vtv.diasRestantes)}
+                        </Badge>
+                      ) : null}
+                    </span>
+                  ) : (
+                    'Cargá tu última VTV'
+                  )
+                }
+              />
+            </CardBody>
+          </Card>
+        </Link>
+
+        <Card>
+          <CardBody>
+            <Stat
+              rotulo="Distancia registrada"
+              icono={<Route size={13} />}
+              valor={recorrido ? fmtNumero(recorrido.km) : '—'}
+              unidad={recorrido ? 'km' : undefined}
+              detalle={
+                recorrido
+                  ? `Desde los ${fmtNumero(recorrido.desde)} km`
+                  : 'Necesita 2 registros con km'
+              }
+            />
           </CardBody>
         </Card>
-      </Link>
 
-      <div className="grid grid-cols-2 gap-3">
+        <Link to="/combustible" className="block">
+          <Card className="h-full transition-colors hover:border-carbon-600">
+            <CardBody>
+              <Stat
+                rotulo="Nafta en tanque"
+                icono={<Droplet size={13} />}
+                valor={tanque.litros != null ? fmtNumero(tanque.litros, 1) : '—'}
+                unidad={tanque.litros != null ? 'L' : undefined}
+                tono={
+                  tanque.nivel == null
+                    ? 'normal'
+                    : tanque.nivel <= 0.12
+                      ? 'peligro'
+                      : tanque.nivel <= 0.25
+                        ? 'alerta'
+                        : 'ok'
+                }
+                detalle={
+                  tanque.autonomiaRestante != null
+                    ? `Alcanza ~${fmtNumero(tanque.autonomiaRestante)} km`
+                    : 'Registrá una medición del tanque'
+                }
+              />
+            </CardBody>
+          </Card>
+        </Link>
+
         <Card>
           <CardBody>
             <Stat
@@ -153,6 +202,7 @@ export function DashboardPage() {
               rotulo={`Nafta ${mes}`}
               icono={<Fuel size={13} />}
               valor={fmtDinero(r.gastoCombustibleMes)}
+              compacto
               detalle={`Año ${anio}: ${fmtDinero(r.gastoCombustibleAnio)}`}
             />
           </CardBody>
@@ -164,32 +214,8 @@ export function DashboardPage() {
               rotulo={`Services ${anio}`}
               icono={<Wallet size={13} />}
               valor={fmtDinero(r.gastoServicesAnio)}
+              compacto
               detalle={`${services.length} ${services.length === 1 ? 'registro' : 'registros'}`}
-            />
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardBody>
-            <Stat
-              rotulo="Nafta en tanque"
-              icono={<Droplet size={13} />}
-              valor={tanque.litros != null ? fmtNumero(tanque.litros, 1) : '—'}
-              unidad={tanque.litros != null ? 'L' : undefined}
-              tono={
-                tanque.nivel == null
-                  ? 'normal'
-                  : tanque.nivel <= 0.12
-                    ? 'peligro'
-                    : tanque.nivel <= 0.25
-                      ? 'alerta'
-                      : 'ok'
-              }
-              detalle={
-                tanque.autonomiaRestante != null
-                  ? `Alcanza ~${fmtNumero(tanque.autonomiaRestante)} km`
-                  : 'Registrá una medición del tanque'
-              }
             />
           </CardBody>
         </Card>
@@ -208,9 +234,9 @@ export function DashboardPage() {
                   {fmtFecha(r.ultimoService.fecha)} · {fmtKm(r.ultimoService.km)} ·{' '}
                   {fmtDinero(r.ultimoService.costo)}
                 </p>
-                {activo.kmActual > r.ultimoService.km ? (
+                {kmOdometro > r.ultimoService.km ? (
                   <p className="num mt-1 text-xs text-carbon-500">
-                    {fmtKm(activo.kmActual - r.ultimoService.km)} recorridos desde entonces
+                    {fmtKm(kmOdometro - r.ultimoService.km)} recorridos desde entonces
                   </p>
                 ) : null}
               </div>

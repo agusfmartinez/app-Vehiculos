@@ -5,6 +5,7 @@ import {
   STORAGE_KEY,
   type CargaCombustible,
   type LecturaTanque,
+  type Poliza,
   type RegistroVTV,
   type Service,
   type Vehiculo,
@@ -24,7 +25,12 @@ interface DatosContextValue {
   services: Service[];
   cargas: CargaCombustible[];
   lecturas: LecturaTanque[];
+  polizas: Poliza[];
   vtv: RegistroVTV[];
+  /** Km del registro más alto cargado; el odómetro nunca puede ir por detrás. */
+  kmMaxRegistrado: number;
+  /** Km del registro más viejo, para medir la distancia recorrida. */
+  kmMinRegistrado: number | null;
 
   seleccionarVehiculo: (id: string) => void;
   agregarVehiculo: (v: Omit<Vehiculo, 'id'>) => string;
@@ -43,6 +49,10 @@ interface DatosContextValue {
   agregarLectura: (l: SinIds<LecturaTanque>) => void;
   editarLectura: (l: LecturaTanque) => void;
   borrarLectura: (id: string) => void;
+
+  agregarPoliza: (p: SinIds<Poliza>) => void;
+  editarPoliza: (p: Poliza) => void;
+  borrarPoliza: (id: string) => void;
 
   agregarVtv: (v: SinIds<RegistroVTV>) => void;
   editarVtv: (v: RegistroVTV) => void;
@@ -78,10 +88,28 @@ export function DatosProvider({ children }: { children: ReactNode }) {
     () => (activoId ? data.lecturasTanque.filter((l) => l.vehiculoId === activoId) : []),
     [data.lecturasTanque, activoId],
   );
+  const polizas = useMemo(
+    () => (activoId ? data.polizas.filter((p) => p.vehiculoId === activoId) : []),
+    [data.polizas, activoId],
+  );
   const vtv = useMemo(
     () => (activoId ? data.vtv.filter((v) => v.vehiculoId === activoId) : []),
     [data.vtv, activoId],
   );
+
+  // El odómetro sale del registro más alto: un service o una carga con más km
+  // que el guardado significa que el auto ya pasó por ahí.
+  const kmRegistrados = useMemo(() => {
+    const todos = [
+      ...services.map((s) => s.km),
+      ...cargas.map((c) => c.km),
+      ...lecturas.map((l) => l.km),
+    ].filter((k) => Number.isFinite(k) && k > 0);
+    return todos;
+  }, [services, cargas, lecturas]);
+
+  const kmMaxRegistrado = kmRegistrados.length ? Math.max(...kmRegistrados) : 0;
+  const kmMinRegistrado = kmRegistrados.length ? Math.min(...kmRegistrados) : null;
 
   /**
    * Al cargar un service o una carga con km mayor al registrado, el odómetro
@@ -104,7 +132,9 @@ export function DatosProvider({ children }: { children: ReactNode }) {
   const value = useMemo<DatosContextValue>(() => {
     /** Alta genérica: asocia el registro al vehículo activo. */
     const alta =
-      <T extends object>(clave: 'services' | 'cargasCombustible' | 'lecturasTanque' | 'vtv') =>
+      <T extends object>(
+        clave: 'services' | 'cargasCombustible' | 'lecturasTanque' | 'polizas' | 'vtv',
+      ) =>
       (registro: T) => {
         if (!activoId) return;
         setData((d) => {
@@ -127,7 +157,10 @@ export function DatosProvider({ children }: { children: ReactNode }) {
       services,
       cargas,
       lecturas,
+      polizas,
       vtv,
+      kmMaxRegistrado,
+      kmMinRegistrado,
 
       seleccionarVehiculo: (id) => setData((d) => ({ ...d, vehiculoActivoId: id })),
 
@@ -159,6 +192,7 @@ export function DatosProvider({ children }: { children: ReactNode }) {
             services: d.services.filter((s) => s.vehiculoId !== id),
             cargasCombustible: d.cargasCombustible.filter((c) => c.vehiculoId !== id),
             lecturasTanque: d.lecturasTanque.filter((l) => l.vehiculoId !== id),
+            polizas: d.polizas.filter((p) => p.vehiculoId !== id),
             vtv: d.vtv.filter((v) => v.vehiculoId !== id),
           };
         }),
@@ -210,6 +244,12 @@ export function DatosProvider({ children }: { children: ReactNode }) {
       borrarLectura: (id) =>
         setData((d) => ({ ...d, lecturasTanque: d.lecturasTanque.filter((x) => x.id !== id) })),
 
+      agregarPoliza: alta<SinIds<Poliza>>('polizas'),
+      editarPoliza: (p) =>
+        setData((d) => ({ ...d, polizas: d.polizas.map((x) => (x.id === p.id ? p : x)) })),
+      borrarPoliza: (id) =>
+        setData((d) => ({ ...d, polizas: d.polizas.filter((x) => x.id !== id) })),
+
       agregarVtv: alta<SinIds<RegistroVTV>>('vtv'),
       editarVtv: (v) =>
         setData((d) => ({ ...d, vtv: d.vtv.map((x) => (x.id === v.id ? v : x)) })),
@@ -218,7 +258,20 @@ export function DatosProvider({ children }: { children: ReactNode }) {
       reemplazarTodo: (d) => setData(migrar(d)),
       borrarTodo: () => setData(datosIniciales),
     };
-  }, [data, setData, activo, activoId, services, cargas, lecturas, vtv, conKmSincronizado]);
+  }, [
+    data,
+    setData,
+    activo,
+    activoId,
+    services,
+    cargas,
+    lecturas,
+    polizas,
+    vtv,
+    kmMaxRegistrado,
+    kmMinRegistrado,
+    conKmSincronizado,
+  ]);
 
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }

@@ -78,6 +78,15 @@
 }
 
 @layer utilities {
+  /* Carruseles de filtros: se arrastran, pero sin barra a la vista. */
+  .sin-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .sin-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }

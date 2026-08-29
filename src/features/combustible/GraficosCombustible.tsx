@@ -12,6 +12,7 @@ import {
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ordenarCargasAsc, tramosConsumo } from '@/lib/calculos';
 import { fmtFechaCorta, fmtNumero } from '@/lib/format';
+import { TODOS, enPeriodo } from '@/lib/periodos';
 import type { CargaCombustible, LecturaTanque } from '@/types';
 
 const EJE = { stroke: '#6b7280', fontSize: 11 };
@@ -61,16 +62,25 @@ interface Props {
   cargas: CargaCombustible[];
   lecturas: LecturaTanque[];
   capacidad?: number;
+  /** Mes a mostrar, o TODOS. Los tramos se arman completos y se recortan acá. */
+  periodo?: string;
 }
 
-export function GraficosCombustible({ cargas, lecturas, capacidad }: Props) {
+export function GraficosCombustible({
+  cargas,
+  lecturas,
+  capacidad,
+  periodo = TODOS,
+}: Props) {
   /**
    * Una fila por fecha con una columna por tipo de nafta. Recharts une los
    * huecos con `connectNulls`, así cada serie dibuja su propia línea aunque
    * las cargas se alternen entre súper y premium.
    */
   const { datosPrecio, seriesPresentes } = useMemo(() => {
-    const asc = ordenarCargasAsc(cargas).filter((c) => c.precioPorLitro > 0);
+    const asc = ordenarCargasAsc(cargas).filter(
+      (c) => c.precioPorLitro > 0 && enPeriodo(c.fecha, periodo),
+    );
     const presentes = new Set<ClaveSerie>();
     const filas = asc.map((c) => {
       const clave = claveDe(c);
@@ -84,12 +94,13 @@ export function GraficosCombustible({ cargas, lecturas, capacidad }: Props) {
       datosPrecio: filas,
       seriesPresentes: SERIES.filter((s) => presentes.has(s.clave)),
     };
-  }, [cargas]);
+  }, [cargas, periodo]);
 
   // Exactos y estimados en series separadas: son mediciones de distinta calidad.
   const { datosAutonomia, hayEstimados } = useMemo(() => {
     const tramos = tramosConsumo(cargas, lecturas, capacidad).filter(
-      (t): t is typeof t & { kmPorLitro: number } => t.descarte === null && t.kmPorLitro != null,
+      (t): t is typeof t & { kmPorLitro: number } =>
+        t.descarte === null && t.kmPorLitro != null && enPeriodo(t.hasta.fecha, periodo),
     );
     return {
       datosAutonomia: tramos.map((t) => ({
@@ -98,7 +109,7 @@ export function GraficosCombustible({ cargas, lecturas, capacidad }: Props) {
       })) as Record<string, string | number>[],
       hayEstimados: tramos.some((t) => t.precision === 'estimado'),
     };
-  }, [cargas, lecturas, capacidad]);
+  }, [cargas, lecturas, capacidad, periodo]);
 
   const hayPrecio = datosPrecio.length >= 2;
   if (!hayPrecio && datosAutonomia.length < 2) return null;

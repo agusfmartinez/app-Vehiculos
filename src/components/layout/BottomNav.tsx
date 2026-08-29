@@ -1,12 +1,17 @@
 import { NavLink } from 'react-router-dom';
-import { Car, Fuel, Gauge, ShieldCheck, Wrench } from 'lucide-react';
+import { Fuel, Gauge, ShieldCheck, ShieldHalf, Wrench } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
+/**
+ * Nafta va al medio: es la sección que más se abre, y en el centro cae bajo el
+ * pulgar. Vehículo salió de acá — se entra desde el tablero, porque se toca una
+ * vez cada tanto y no compite con las secciones de uso diario.
+ */
 const TABS = [
   { to: '/', label: 'Tablero', icono: Gauge, exact: true },
-  { to: '/vehiculo', label: 'Vehículo', icono: Car },
   { to: '/services', label: 'Services', icono: Wrench },
   { to: '/combustible', label: 'Nafta', icono: Fuel },
+  { to: '/seguro', label: 'Seguro', icono: ShieldHalf },
   { to: '/vtv', label: 'VTV', icono: ShieldCheck },
 ];
 

@@ -30,18 +30,19 @@ npm run lint      # solo typecheck (tsc --noEmit)
 ## Cómo se guardan los datos
 
 Todo vive en una sola clave de `localStorage`: **`vehiculo-data-v1`** (el sufijo del nombre es
-histórico: identifica el slot, no el schema). El schema actual es **`version: 3`**. El hook
+histórico: identifica el slot, no el schema). El schema actual es **`version: 4`**. El hook
 [`useLocalStorage`](src/hooks/useLocalStorage.ts) escribe con *debounce* de 400 ms y hace un
 *flush* final al cerrar u ocultar la pestaña, así no se pierde el último cambio.
 
 ```ts
 {
-  version: 3,
+  version: 4,
   vehiculos: Vehiculo[],        // cada uno con su id
   vehiculoActivoId: string | null,
   services: Service[],          // cada registro con vehiculoId
   cargasCombustible: CargaCombustible[],
   lecturasTanque: LecturaTanque[],
+  polizas: Poliza[],
   vtv: RegistroVTV[]
 }
 ```
@@ -56,7 +57,8 @@ en cada lectura (del storage o de un backup importado). De v1 a v2:
 - si el v1 estaba vacío, arranca sin vehículos en vez de crear uno fantasma;
 - registros con un `vehiculoId` que ya no existe se adoptan por el primer vehículo.
 
-De v2 a v3 aparece `lecturasTanque`, que arranca vacío; nada más cambia.
+De v2 a v3 aparece `lecturasTanque` y de v3 a v4 `polizas`; ambos arrancan vacíos y nada más
+cambia.
 
 Es idempotente: volver a migrar no cambia nada.
 
@@ -68,10 +70,11 @@ Es idempotente: volver a migrar no cambia nada.
 
 | Sección | Qué hace |
 | --- | --- |
-| **Tablero** | Odómetro editable en el lugar, VTV con semáforo, alertas de mantenimiento, autonomía y gastos del mes/año. |
-| **Vehículos** | Alta/edición/baja de varios vehículos, selección del activo + exportar/importar/borrar datos. |
+| **Tablero** | Ficha del vehículo con odómetro de sólo lectura, VTV con semáforo, alertas de mantenimiento, distancia recorrida, tanque, autonomía y gastos del mes/año. |
+| **Vehículos** | Alta/edición/baja de varios vehículos, selección del activo + exportar/importar/borrar datos. Se entra desde la card del tablero, no desde la barra inferior. |
+| **Seguro** | Una póliza por mes: aseguradora, monto y datos opcionales. Vista *Pólizas* con la variación contra el mes anterior y vista *Reportes* con la evolución de la cuota y el aumento mes a mes. Se filtra por año, porque hay una sola póliza por mes. |
 | **Services** | Alta/edición/baja, filtro por tipo, próximo km y fecha **calculados automáticamente**. |
-| **Combustible** | Cargas por monto pagado y tipo de nafta, mediciones del tanque sin cargar, nivel actual estimado, km/L por tramo y gráficos. |
+| **Combustible** | Sub-tabs Registros / Análisis, filtro por mes, cargas por monto pagado y tipo de nafta, mediciones del tanque sin cargar, nivel actual estimado y gráficos. |
 | **VTV** | Historial, resultado y cálculo automático de vigente / por vencer / vencida. |
 
 ## Cómo se carga una nafta
@@ -206,6 +209,31 @@ vez de hablar de km/L.
 
 Los dos casos se marcan en rojo en el listado, con los km y los litros que produjeron el número
 para ubicar el registro culpable, y quedan **fuera del promedio**.
+
+## Navegación
+
+La barra inferior tiene las cinco secciones de uso diario: **Tablero · Services · Nafta · Seguro ·
+VTV**, con Nafta al medio porque es la que más se abre y en el centro cae bajo el pulgar.
+
+**Vehículos** salió de la barra: se toca una vez cada tanto, así que se entra desde una card del
+tablero en vez de ocupar un lugar fijo.
+
+## Filtro por mes
+
+Combustible filtra por mes con chips desplazables, más una opción **Todas**. El historial muestra
+20 registros y un botón *Ver más*.
+
+El filtro recorta **lo que se muestra, no lo que se calcula**: el consumo de un mes necesita la
+carga del mes anterior para tener contra qué comparar. Los ciclos se arman siempre sobre el
+historial completo y recién después se filtran por el mes en que terminan.
+
+## Odómetro
+
+El km del tablero sale del **registro más alto cargado** — service, carga o medición — y no del
+valor guardado a mano: si estuviste en el taller con 138.913 km, el auto tiene al menos esos.
+Por eso el tablero lo muestra de sólo lectura: se corrige cargando una medición o editando el km
+en la ficha del vehículo, nunca desde el tablero. También se muestra la distancia cubierta por el
+historial (del registro más viejo al más nuevo).
 
 ## Próximo service automático
 

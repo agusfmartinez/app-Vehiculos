@@ -1,4 +1,4 @@
-export const DATA_VERSION = 3;
+export const DATA_VERSION = 4;
 
 /**
  * La clave conserva el sufijo "-v1" por compatibilidad: es el slot de storage
@@ -97,6 +97,32 @@ export interface LecturaTanque {
   nota?: string;
 }
 
+/**
+ * Póliza de seguro de un período. Se carga una por mes a medida que llega, así
+ * queda el histórico y se puede ver cuánto aumentó.
+ */
+export interface Poliza {
+  id: string;
+  vehiculoId: string;
+  /** Período de vigencia en formato YYYY-MM. */
+  periodo: string;
+  aseguradora: string;
+  monto: number;
+  cobertura?: string;
+  numeroPoliza?: string;
+  /** Fecha de vencimiento de la cuota, ISO date. */
+  vencimiento?: string;
+  notas?: string;
+}
+
+export const COBERTURAS = [
+  'Responsabilidad civil',
+  'Terceros completo',
+  'Terceros completo con franquicia',
+  'Todo riesgo',
+  'Otra',
+] as const;
+
 export type ResultadoVTV = 'aprobada' | 'rechazada' | 'pendiente';
 
 export interface RegistroVTV {
@@ -116,6 +142,7 @@ export interface VehiculoData {
   services: Service[];
   cargasCombustible: CargaCombustible[];
   lecturasTanque: LecturaTanque[];
+  polizas: Poliza[];
   vtv: RegistroVTV[];
 }
 

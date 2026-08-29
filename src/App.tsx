@@ -5,6 +5,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { VehiculoPage } from '@/features/vehiculo/VehiculoPage';
 import { ServicesPage } from '@/features/services/ServicesPage';
 import { CombustiblePage } from '@/features/combustible/CombustiblePage';
+import { SeguroPage } from '@/features/seguro/SeguroPage';
 import { VtvPage } from '@/features/vtv/VtvPage';
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/vehiculo" element={<VehiculoPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/combustible" element={<CombustiblePage />} />
+          <Route path="/seguro" element={<SeguroPage />} />
           <Route path="/vtv" element={<VtvPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

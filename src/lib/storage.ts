@@ -3,6 +3,7 @@ import {
   type Carroceria,
   type CargaCombustible,
   type LecturaTanque,
+  type Poliza,
   type RegistroVTV,
   type Service,
   type Vehiculo,
@@ -16,6 +17,7 @@ export const datosIniciales: VehiculoData = {
   services: [],
   cargasCombustible: [],
   lecturasTanque: [],
+  polizas: [],
   vtv: [],
 };
 
@@ -71,6 +73,7 @@ function tieneDatos(v: Partial<Vehiculo> | undefined): boolean {
  * v1 → v2: el `vehiculo` único pasa a ser el primer elemento de `vehiculos`,
  * y todos los registros existentes quedan asociados a su id.
  * v2 → v3: aparece `lecturasTanque`, que arranca vacío.
+ * v3 → v4: aparece `polizas`, que arranca vacío.
  */
 export function migrar(raw: unknown): VehiculoData {
   if (!raw || typeof raw !== 'object') return datosIniciales;
@@ -85,6 +88,7 @@ export function migrar(raw: unknown): VehiculoData {
         (l) => Number.isFinite(Number(l.nivel)) && Number.isFinite(Number(l.km)),
       )
     : [];
+  const polizas = Array.isArray(d.polizas) ? (d.polizas as Poliza[]) : [];
   const vtv = Array.isArray(d.vtv) ? (d.vtv as RegistroVTV[]) : [];
 
   let vehiculos: Vehiculo[];
@@ -101,7 +105,14 @@ export function migrar(raw: unknown): VehiculoData {
   } else {
     // v1: un único vehículo suelto en `vehiculo`.
     const viejo = d.vehiculo as Partial<Vehiculo> | undefined;
-    if (tieneDatos(viejo) || services.length || cargas.length || lecturas.length || vtv.length) {
+    if (
+      tieneDatos(viejo) ||
+      services.length ||
+      cargas.length ||
+      lecturas.length ||
+      polizas.length ||
+      vtv.length
+    ) {
       const migrado = normalizarVehiculo(viejo);
       vehiculos = [migrado];
       idPorDefecto = migrado.id;
@@ -133,6 +144,7 @@ export function migrar(raw: unknown): VehiculoData {
       // El nivel siempre queda dentro de 0..1 aunque venga sucio de un backup.
       nivel: Math.min(1, Math.max(0, Number(l.nivel))),
     })),
+    polizas: asignar(polizas),
     vtv: asignar(vtv),
   };
 }
@@ -147,6 +159,7 @@ export function esBackupValido(raw: unknown): boolean {
     Array.isArray(d.services) ||
     Array.isArray(d.cargasCombustible) ||
     Array.isArray(d.lecturasTanque) ||
+    Array.isArray(d.polizas) ||
     Array.isArray(d.vtv)
   );
 }

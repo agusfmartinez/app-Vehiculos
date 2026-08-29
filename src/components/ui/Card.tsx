@@ -50,6 +50,8 @@ interface StatProps {
   detalle?: ReactNode;
   tono?: 'normal' | 'acento' | 'ok' | 'alerta' | 'peligro';
   icono?: ReactNode;
+  /** Para cifras largas (precios): baja un escalón para no partirse en dos líneas. */
+  compacto?: boolean;
 }
 
 const TONOS: Record<NonNullable<StatProps['tono']>, string> = {
@@ -60,14 +62,28 @@ const TONOS: Record<NonNullable<StatProps['tono']>, string> = {
   peligro: 'text-rojo-500',
 };
 
-export function Stat({ rotulo, valor, unidad, detalle, tono = 'normal', icono }: StatProps) {
+export function Stat({
+  rotulo,
+  valor,
+  unidad,
+  detalle,
+  tono = 'normal',
+  icono,
+  compacto,
+}: StatProps) {
   return (
     <div className="flex flex-col gap-1">
       <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-carbon-400">
         {icono}
         {rotulo}
       </span>
-      <span className={cn('num text-2xl font-bold leading-none', TONOS[tono])}>
+      <span
+        className={cn(
+          'num font-bold leading-none whitespace-nowrap',
+          compacto ? 'text-xl' : 'text-2xl',
+          TONOS[tono],
+        )}
+      >
         {valor}
         {unidad ? (
           <span className="ml-1 text-sm font-medium text-carbon-400">{unidad}</span>
