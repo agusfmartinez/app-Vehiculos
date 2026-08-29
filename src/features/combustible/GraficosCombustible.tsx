@@ -10,9 +10,9 @@ import {
   YAxis,
 } from 'recharts';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
-import { calcularTramos, ordenarCargasAsc } from '@/lib/calculos';
+import { ordenarCargasAsc, tramosConsumo } from '@/lib/calculos';
 import { fmtFechaCorta, fmtNumero } from '@/lib/format';
-import type { CargaCombustible } from '@/types';
+import type { CargaCombustible, LecturaTanque } from '@/types';
 
 const EJE = { stroke: '#6b7280', fontSize: 11 };
 const GRID = '#262a31';
@@ -57,7 +57,13 @@ function TooltipTablero({ active, payload, label, sufijo, decimales }: TooltipPr
   );
 }
 
-export function GraficosCombustible({ cargas }: { cargas: CargaCombustible[] }) {
+interface Props {
+  cargas: CargaCombustible[];
+  lecturas: LecturaTanque[];
+  capacidad?: number;
+}
+
+export function GraficosCombustible({ cargas, lecturas, capacidad }: Props) {
   /**
    * Una fila por fecha con una columna por tipo de nafta. Recharts une los
    * huecos con `connectNulls`, así cada serie dibuja su propia línea aunque
@@ -80,16 +86,19 @@ export function GraficosCombustible({ cargas }: { cargas: CargaCombustible[] }) 
     };
   }, [cargas]);
 
-  const datosAutonomia = useMemo(
-    () =>
-      calcularTramos(cargas)
-        .filter((t) => t.confiable && t.kmPorLitro != null)
-        .map((t) => ({
-          fecha: fmtFechaCorta(t.carga.fecha),
-          kmL: Number(t.kmPorLitro!.toFixed(2)),
-        })),
-    [cargas],
-  );
+  // Exactos y estimados en series separadas: son mediciones de distinta calidad.
+  const { datosAutonomia, hayEstimados } = useMemo(() => {
+    const tramos = tramosConsumo(cargas, lecturas, capacidad).filter(
+      (t): t is typeof t & { kmPorLitro: number } => t.descarte === null && t.kmPorLitro != null,
+    );
+    return {
+      datosAutonomia: tramos.map((t) => ({
+        fecha: fmtFechaCorta(t.hasta.fecha),
+        [t.precision === 'exacto' ? 'exacto' : 'estimado']: Number(t.kmPorLitro.toFixed(2)),
+      })) as Record<string, string | number>[],
+      hayEstimados: tramos.some((t) => t.precision === 'estimado'),
+    };
+  }, [cargas, lecturas, capacidad]);
 
   const hayPrecio = datosPrecio.length >= 2;
   if (!hayPrecio && datosAutonomia.length < 2) return null;
@@ -162,19 +171,40 @@ export function GraficosCombustible({ cargas }: { cargas: CargaCombustible[] }) 
                   content={<TooltipTablero sufijo="km/L" decimales={2} />}
                   cursor={{ stroke: '#474d58' }}
                 />
+                {hayEstimados ? (
+                  <Legend
+                    verticalAlign="bottom"
+                    height={24}
+                    wrapperStyle={{ fontSize: 11, color: '#9aa1ad' }}
+                  />
+                ) : null}
                 <Line
                   type="monotone"
-                  dataKey="kmL"
-                  name="Autonomía"
+                  dataKey="exacto"
+                  name="Tanque lleno"
                   stroke="#2ecc71"
                   strokeWidth={2}
+                  connectNulls
                   dot={{ r: 2.5, fill: '#2ecc71' }}
                   activeDot={{ r: 4 }}
                 />
+                {hayEstimados ? (
+                  <Line
+                    type="monotone"
+                    dataKey="estimado"
+                    name="Con medidor"
+                    stroke="#9aa1ad"
+                    strokeWidth={2}
+                    strokeDasharray="4 3"
+                    connectNulls
+                    dot={{ r: 2.5, fill: '#9aa1ad' }}
+                    activeDot={{ r: 4 }}
+                  />
+                ) : null}
               </LineChart>
             </ResponsiveContainer>
             <p className="px-4 pt-2 text-xs text-carbon-500">
-              Sólo tramos confiables (tanque lleno en las dos cargas).
+              Verde: medido entre dos tanques llenos. Gris punteado: estimado con el medidor.
             </p>
           </CardBody>
         </Card>

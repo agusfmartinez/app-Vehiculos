@@ -11,12 +11,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
-import {
-  autonomiaPorMedidor,
-  estadoTanque,
-  resumenDashboard,
-  type EstadoVTV,
-} from '@/lib/calculos';
+import { estadoTanque, resumenDashboard, type EstadoVTV } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtKm, fmtNumero, textoDias } from '@/lib/format';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/EmptyState';
@@ -40,25 +35,25 @@ export function DashboardPage() {
       resumenDashboard({
         services,
         cargas,
+        lecturas,
         vtv,
         kmActual: activo?.kmActual ?? 0,
+        capacidad: activo?.capacidadTanque,
       }),
-    [services, cargas, vtv, activo],
+    [services, cargas, lecturas, vtv, activo],
   );
 
-  // Nivel del tanque: el full-to-full manda; si no hay, sirve el medidor.
-  const tanque = useMemo(() => {
-    const kmPorLitro =
-      r.autonomia.kmPorLitro ??
-      autonomiaPorMedidor(lecturas, cargas, activo?.capacidadTanque).kmPorLitro;
-    return estadoTanque({
-      cargas,
-      lecturas,
-      kmActual: activo?.kmActual ?? 0,
-      capacidad: activo?.capacidadTanque,
-      kmPorLitro,
-    });
-  }, [cargas, lecturas, activo, r.autonomia.kmPorLitro]);
+  const tanque = useMemo(
+    () =>
+      estadoTanque({
+        cargas,
+        lecturas,
+        kmActual: activo?.kmActual ?? 0,
+        capacidad: activo?.capacidadTanque,
+        kmPorLitro: r.autonomia.kmPorLitro,
+      }),
+    [cargas, lecturas, activo, r.autonomia.kmPorLitro],
+  );
 
   const anio = new Date().getFullYear();
   const mes = new Date().toLocaleDateString('es-AR', { month: 'long' });
@@ -145,8 +140,8 @@ export function DashboardPage() {
               tono="acento"
               detalle={
                 r.autonomia.kmPorLitro != null
-                  ? `${fmtNumero(r.litros100, 1)} L/100 km · ${r.autonomia.tramosUsados} ${r.autonomia.tramosUsados === 1 ? 'tramo' : 'tramos'}`
-                  : 'Necesita 2 cargas con tanque lleno'
+                  ? `${fmtNumero(r.litros100, 1)} L/100 km · ${r.autonomia.tramosUsados} ${r.autonomia.tramosUsados === 1 ? 'tramo' : 'tramos'}${r.autonomia.precision === 'estimado' ? ' (estimado)' : ''}`
+                  : 'Necesita 2 registros con nivel conocido'
               }
             />
           </CardBody>

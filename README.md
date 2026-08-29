@@ -111,36 +111,101 @@ El resultado se recorta siempre a `[0, capacidad]`.
 Necesita dos cosas: la capacidad del tanque (ficha del vehículo) y una autonomía medida. Cuando
 falta alguna, la app dice cuál en vez de mostrar un número inventado.
 
-### Consumo sin llenar nunca el tanque
+Dos mediciones consecutivas alcanzan para medir consumo sin llenar nunca el tanque: es el mismo
+cálculo de la sección siguiente.
 
-Entre dos mediciones consecutivas también se puede medir el consumo:
+## Cómo se calcula el consumo
+
+La referencia es **de carga a carga**. Una carga fija un nivel conocido, y el ciclo entre dos
+cargas es el tramo más largo y con menos lecturas de aguja involucradas: el menos ruidoso.
+
+Las **mediciones del tanque son puntos dentro de ese ciclo**. Sirven para saber cuánto queda y
+cómo viene el tanque en curso, pero **no parten el tramo de referencia**. Esto es deliberado:
+
+> Registrar un dato de más nunca debe empeorar el cálculo.
+
+Sin esa regla, medir el tanque en 13% y cargar nafta cinco kilómetros después partía un ciclo de
+205 km en uno bueno y uno inservible — y había que borrar la medición para recuperar el número.
+
+Sólo cuando todavía no hay dos cargas comparables se cae a las mediciones, para no dejar la
+pantalla sin ningún número. La app dice sobre qué base calculó.
+
+### La fórmula
+
+Entre los dos extremos de un tramo:
 
 ```
-litros = (nivelDesde − nivelHasta) × capacidad + litros cargados en el medio
+litros = nivelDesde × capacidad
+       + litros cargados en el medio (incluidos los del evento final)
+       − nivelHasta × capacidad
+
 km/L   = (kmHasta − kmDesde) / litros
 ```
 
-Se muestra aparte y marcado como estimado: **la aguja no es lineal**, así que es menos preciso
-que el full-to-full. Si hay ambos, el full-to-full manda. Los tramos imposibles (la aguja sube
-sin que haya habido una carga, o el kilometraje no avanzó) se descartan.
+No reemplaza al full-to-full clásico, lo **generaliza**: si los dos extremos son tanque lleno,
+`nivelDesde = nivelHasta = 1` y los términos de capacidad se cancelan, quedando
+`litros = los litros cargados`. Por eso un ciclo entre dos tanques llenos sigue siendo exacto y
+ni siquiera necesita que la capacidad esté cargada.
 
-## Cómo se calcula la autonomía
+Una carga parcial en el medio **no corta el ciclo**: sus litros entran al balance. Antes se
+perdían dos tramos por cada carga parcial intermedia.
 
-Método *full-to-full*: los litros de una carga son los que se consumieron **desde la carga
-anterior**.
+### Qué nivel conoce cada evento
+
+| Evento | ¿Nivel conocido? |
+| --- | --- |
+| Carga a tanque lleno | Sí, nivel = 1 |
+| Carga estimada con el medidor | Sí, el nivel después de cargar |
+| Medición del medidor | Sí, el nivel de la aguja |
+| **Carga parcial por ticket** | **No** — sabe cuántos litros entraron, no dónde quedó la aguja |
+
+### Precisión
+
+- **exacto** — los dos extremos son tanques llenos por ticket. No depende de la aguja ni de la
+  capacidad declarada.
+- **estimado** — algún extremo salió del medidor. Los litros salidos del medidor hacen estimado
+  al tramo **aunque la aguja termine en F**: lo que se aproxima son los litros, no sólo el nivel.
+
+### Cómo se promedia
+
+Total de kilómetros sobre total de litros, **no** el promedio de los km/L de cada ciclo:
 
 ```
-km/L = (km de esta carga − km de la carga anterior) / litros de esta carga
+km/L = Σ kmRecorridos / Σ litrosConsumidos
 ```
 
-Un tramo se considera **confiable** solo si:
+Promediar razones le da el mismo peso a un ciclo de 30 km que a uno de 600.
 
-1. ambas cargas dejaron el tanque lleno (`tanqueLleno: true`),
-2. ninguna de las dos tiene litros estimados con el medidor, y
-3. el kilometraje avanzó.
+### Tanque en curso
 
-Los tramos no confiables se muestran igual, marcados y con el motivo, pero quedan fuera del
-promedio y del gráfico. El promedio del tablero usa los últimos 5 tramos confiables.
+Aparte del promedio, se muestra el parcial del ciclo abierto: de la última carga a la última
+medición posterior. Es un ciclo sin cerrar, así que **no entra al promedio**.
+
+### Resolución del medidor
+
+La aguja se lee de a muescas: con el control en pasos de ⅛, un tanque de 55 L da **6,875 L por
+muesca**. Ese es el mínimo que el instrumento puede distinguir.
+
+Un tramo estimado cuyo consumo quede por debajo de una muesca no es una medición, es ruido. No se
+corta ahí: el tramo se extiende hasta la siguiente ancla, y si era el último del historial, sus
+kilómetros se absorben en el tramo anterior.
+
+Por eso los litros estimados con el medidor se guardan con 3 decimales. Con 2 quedaba un residuo:
+`(0,5 − 0,125) × 55 = 20,625 L` se guardaba como `20,63`, y esos 0,005 L de más se leían después
+como consumo real — un tramo de 5 km daba 1.000 km/L.
+
+### Datos imposibles
+
+Un vehículo naftero rinde entre 5 y 20 km/L; una moto llega a 40. Un tramo fuera de la banda
+**1–60 km/L** no es un rendimiento raro: es un dato mal cargado — un kilometraje tipeado con un
+dígito de más, o una aguja marcada al revés.
+
+Caso aparte: si el consumo da **negativo más allá del ruido**, la aguja subió sin que haya una
+carga registrada en el medio. Los datos se contradicen, y el aviso lo dice con esas palabras en
+vez de hablar de km/L.
+
+Los dos casos se marcan en rojo en el listado, con los km y los litros que produjeron el número
+para ubicar el registro culpable, y quedan **fuera del promedio**.
 
 ## Próximo service automático
 

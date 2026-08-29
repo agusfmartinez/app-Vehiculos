@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Fuel, Gauge, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Fuel, Gauge, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
 import { PageHeader } from '@/components/layout/AppShell';
 import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
@@ -9,14 +9,16 @@ import { Card, CardBody, Stat } from '@/components/ui/Card';
 import { Badge, EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmarBorrado } from '@/components/ui/Modal';
 import {
-  autonomiaPorMedidor,
   autonomiaPromedio,
-  calcularTramos,
   estadoTanque,
   gastoCombustibleMes,
   litrosPor100km,
+  pasosMedicion,
   precioPromedioPorLitro,
-  type TramoCombustible,
+  resolucionMedidor,
+  tramosConsumo,
+  tramosPorEventoFinal,
+  type TramoConsumo,
 } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtNumero, parseFecha } from '@/lib/format';
 import { CargaForm } from '@/features/combustible/CargaForm';
@@ -37,12 +39,107 @@ function etiquetaTipo(t: NonNullable<CargaCombustible['tipoCombustible']>): stri
 
 /** Cargas y mediciones en una sola línea de tiempo, de lo más nuevo a lo más viejo. */
 type ItemTimeline =
-  | { clase: 'carga'; id: string; fecha: string; km: number; tramo: TramoCombustible }
+  | { clase: 'carga'; id: string; fecha: string; km: number; carga: CargaCombustible }
   | { clase: 'lectura'; id: string; fecha: string; km: number; lectura: LecturaTanque };
 
+/** Los tres números del tramo: rendimiento, distancia y litros. */
+function BadgeTramo({ tramo }: { tramo: TramoConsumo }) {
+  if (tramo.descarte === 'bajo-resolucion') {
+    return (
+      <>
+        <Badge>Tramo corto</Badge>
+        <Badge>{fmtNumero(tramo.kmRecorridos)} km recorridos</Badge>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Badge tono={tramo.descarte === 'implausible' ? 'peligro' : 'ok'}>
+        {fmtNumero(tramo.kmPorLitro, 2)} km/L
+      </Badge>
+      <Badge>{fmtNumero(tramo.kmRecorridos)} km recorridos</Badge>
+      <Badge>{fmtNumero(tramo.litrosConsumidos, 2)} L consumidos</Badge>
+      {tramo.cargasIntermedias > 0 ? (
+        <Badge>
+          {tramo.cargasIntermedias} {tramo.cargasIntermedias === 1 ? 'carga' : 'cargas'} en el medio
+        </Badge>
+      ) : null}
+    </>
+  );
+}
+
+/** Explica por qué el tramo no entra en el promedio. */
+function AvisoDescarte({ tramo, capacidad }: { tramo: TramoConsumo; capacidad?: number }) {
+  if (tramo.descarte === 'bajo-resolucion') {
+    return (
+      <p className="flex items-start gap-1.5 text-xs text-carbon-500">
+        <Info size={13} className="mt-0.5 shrink-0" />
+        Muy pocos kilómetros para medir consumo: la aguja se mueve de a{' '}
+        {capacidad ? `${fmtNumero(resolucionMedidor(capacidad), 1)} L` : 'una muesca'} y en{' '}
+        {fmtNumero(tramo.kmRecorridos)} km no llegó a bajar tanto. El dato está bien, no alcanza
+        para calcular.
+      </p>
+    );
+  }
+
+  if (tramo.descarte !== 'implausible' || tramo.kmPorLitro == null) return null;
+
+  const agujaSubio = tramo.litrosConsumidos < 0;
+
+  return (
+    <p className="flex items-start gap-1.5 rounded-lg bg-rojo-500/10 px-2 py-1.5 text-xs text-rojo-500">
+      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+      <span>
+        {agujaSubio ? (
+          <>
+            La aguja subió sin que haya una carga registrada en el medio. Falta cargar esa nafta,
+            o alguno de los dos niveles está al revés.
+          </>
+        ) : (
+          <>
+            {fmtNumero(tramo.kmPorLitro, 2)} km/L es imposible: hay un dato mal cargado. Revisá el
+            kilometraje ({fmtNumero(tramo.desde.km)} → {fmtNumero(tramo.hasta.km)} km) o el nivel
+            de la aguja de este registro y del anterior.
+          </>
+        )}{' '}
+        Queda fuera del promedio.
+      </span>
+    </p>
+  );
+}
+
+function AccionesItem({ onEditar, onBorrar }: { onEditar: () => void; onBorrar: () => void }) {
+  return (
+    <div className="flex gap-2 border-t border-carbon-700 pt-2">
+      <Button variante="fantasma" tamanio="sm" icono={<Pencil size={14} />} onClick={onEditar}>
+        Editar
+      </Button>
+      <Button
+        variante="fantasma"
+        tamanio="sm"
+        icono={<Trash2 size={14} />}
+        className="text-rojo-500 hover:bg-rojo-500/10 hover:text-rojo-500"
+        onClick={onBorrar}
+      >
+        Borrar
+      </Button>
+    </div>
+  );
+}
+
 export function CombustiblePage() {
-  const { cargas, lecturas, activo, agregarCarga, editarCarga, borrarCarga, agregarLectura, editarLectura, borrarLectura } =
-    useDatos();
+  const {
+    cargas,
+    lecturas,
+    activo,
+    agregarCarga,
+    editarCarga,
+    borrarCarga,
+    agregarLectura,
+    editarLectura,
+    borrarLectura,
+  } = useDatos();
   const navigate = useNavigate();
 
   const [formCarga, setFormCarga] = useState(false);
@@ -51,14 +148,24 @@ export function CombustiblePage() {
   const [editandoLectura, setEditandoLectura] = useState<LecturaTanque | undefined>();
   const [aBorrar, setABorrar] = useState<ItemTimeline | null>(null);
 
-  const autonomia = useMemo(() => autonomiaPromedio(cargas), [cargas]);
-  const porMedidor = useMemo(
-    () => autonomiaPorMedidor(lecturas, cargas, activo?.capacidadTanque),
-    [lecturas, cargas, activo],
+  const capacidad = activo?.capacidadTanque;
+
+  const autonomia = useMemo(
+    () => autonomiaPromedio({ cargas, lecturas, capacidad }),
+    [cargas, lecturas, capacidad],
   );
-  // Para el nivel del tanque sirve cualquiera de las dos medidas; el
-  // full-to-full manda por ser más preciso.
-  const kmPorLitro = autonomia.kmPorLitro ?? porMedidor.kmPorLitro;
+
+  // Las cargas muestran el ciclo contra la carga anterior…
+  const ciclosPorCarga = useMemo(
+    () => tramosPorEventoFinal(tramosConsumo(cargas, lecturas, capacidad)),
+    [cargas, lecturas, capacidad],
+  );
+
+  // …y las mediciones, el paso contra el registro inmediatamente anterior.
+  const pasos = useMemo(
+    () => pasosMedicion(cargas, lecturas, capacidad),
+    [cargas, lecturas, capacidad],
+  );
 
   const tanque = useMemo(
     () =>
@@ -66,13 +173,13 @@ export function CombustiblePage() {
         cargas,
         lecturas,
         kmActual: activo?.kmActual ?? 0,
-        capacidad: activo?.capacidadTanque,
-        kmPorLitro,
+        capacidad,
+        kmPorLitro: autonomia.kmPorLitro,
       }),
-    [cargas, lecturas, activo, kmPorLitro],
+    [cargas, lecturas, activo, capacidad, autonomia.kmPorLitro],
   );
 
-  const precioProm = useMemo(() => precioPromedioPorLitro(cargas), [cargas]);
+  const precioPromedio = useMemo(() => precioPromedioPorLitro(cargas), [cargas]);
   const ultimaCarga = useMemo(() => {
     const asc = [...cargas].sort((a, b) => a.fecha.localeCompare(b.fecha));
     return asc.at(-1);
@@ -89,14 +196,8 @@ export function CombustiblePage() {
 
   const timeline = useMemo<ItemTimeline[]>(() => {
     const items: ItemTimeline[] = [
-      ...calcularTramos(cargas).map(
-        (t): ItemTimeline => ({
-          clase: 'carga',
-          id: t.carga.id,
-          fecha: t.carga.fecha,
-          km: t.carga.km,
-          tramo: t,
-        }),
+      ...cargas.map(
+        (c): ItemTimeline => ({ clase: 'carga', id: c.id, fecha: c.fecha, km: c.km, carga: c }),
       ),
       ...lecturas.map(
         (l): ItemTimeline => ({ clase: 'lectura', id: l.id, fecha: l.fecha, km: l.km, lectura: l }),
@@ -121,13 +222,31 @@ export function CombustiblePage() {
 
   const vacio = cargas.length === 0 && lecturas.length === 0;
 
+  const detalleAutonomia = () => {
+    if (autonomia.kmPorLitro == null) return 'Faltan 2 cargas para comparar';
+    const l100 = `${fmtNumero(litrosPor100km(autonomia.kmPorLitro), 1)} L/100 km`;
+    const cuantos = `${autonomia.tramosUsados} ${autonomia.tramosUsados === 1 ? 'ciclo' : 'ciclos'}`;
+    const origen =
+      autonomia.base === 'cargas'
+        ? autonomia.precision === 'exacto'
+          ? 'entre cargas a tanque lleno'
+          : 'entre cargas'
+        : 'entre mediciones';
+    return `${l100} · ${cuantos} ${origen}`;
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         titulo="Combustible"
         subtitulo={`${cargas.length} ${cargas.length === 1 ? 'carga' : 'cargas'} · ${fmtDinero(gastoCombustibleMes(cargas))} este mes`}
         accion={
-          <Button variante="secundario" tamanio="sm" icono={<Gauge size={15} />} onClick={abrirLectura}>
+          <Button
+            variante="secundario"
+            tamanio="sm"
+            icono={<Gauge size={15} />}
+            onClick={abrirLectura}
+          >
             Medir
           </Button>
         }
@@ -143,11 +262,7 @@ export function CombustiblePage() {
         />
       ) : (
         <>
-          <TanqueCard
-            estado={tanque}
-            capacidad={activo.capacidadTanque}
-            onMedir={abrirLectura}
-          />
+          <TanqueCard estado={tanque} capacidad={capacidad} onMedir={abrirLectura} />
 
           <div className="grid grid-cols-2 gap-3">
             <Card>
@@ -157,14 +272,8 @@ export function CombustiblePage() {
                   icono={<Gauge size={13} />}
                   valor={autonomia.kmPorLitro != null ? fmtNumero(autonomia.kmPorLitro, 2) : '—'}
                   unidad="km/L"
-                  tono="acento"
-                  detalle={
-                    autonomia.kmPorLitro != null
-                      ? `${fmtNumero(litrosPor100km(autonomia.kmPorLitro), 1)} L/100 km · tanque lleno`
-                      : porMedidor.kmPorLitro != null
-                        ? `Sin tramos full-to-full`
-                        : 'Faltan tramos confiables'
-                  }
+                  tono={autonomia.precision === 'estimado' ? 'normal' : 'acento'}
+                  detalle={detalleAutonomia()}
                 />
               </CardBody>
             </Card>
@@ -176,9 +285,9 @@ export function CombustiblePage() {
                   valor={fmtDinero(ultimoPrecio, 2)}
                   detalle={
                     ultimaCarga?.tipoCombustible
-                      ? `${etiquetaTipo(ultimaCarga.tipoCombustible)} · promedio ${fmtDinero(precioProm, 2)}`
-                      : precioProm != null
-                        ? `Promedio ${fmtDinero(precioProm, 2)}`
+                      ? `${etiquetaTipo(ultimaCarga.tipoCombustible)} · promedio ${fmtDinero(precioPromedio, 2)}`
+                      : precioPromedio != null
+                        ? `Promedio ${fmtDinero(precioPromedio, 2)}`
                         : undefined
                   }
                 />
@@ -186,21 +295,36 @@ export function CombustiblePage() {
             </Card>
           </div>
 
-          {porMedidor.kmPorLitro != null ? (
+          {autonomia.tramosImplausibles > 0 ? (
+            <Card className="border-rojo-500/40 bg-rojo-500/[0.07]">
+              <CardBody className="flex items-start gap-2">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0 text-rojo-500" />
+                <p className="text-xs text-carbon-200">
+                  {autonomia.tramosImplausibles}{' '}
+                  {autonomia.tramosImplausibles === 1
+                    ? 'tramo da un rendimiento imposible y quedó'
+                    : 'tramos dan un rendimiento imposible y quedaron'}{' '}
+                  fuera del promedio. Buscá abajo los marcados en rojo: casi siempre es un
+                  kilometraje con un dígito de más o una aguja marcada al revés.
+                </p>
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {autonomia.enCurso ? (
             <Card className="border-carbon-600">
               <CardBody className="flex items-baseline justify-between gap-3">
                 <span className="flex flex-col">
                   <span className="text-[11px] font-medium uppercase tracking-wider text-carbon-400">
-                    Consumo medido con el medidor
+                    Tanque en curso
                   </span>
-                  <span className="text-xs text-carbon-500">
-                    {porMedidor.tramosUsados}{' '}
-                    {porMedidor.tramosUsados === 1 ? 'tramo' : 'tramos'} entre mediciones · estimado,
-                    la aguja no es lineal
+                  <span className="num text-xs text-carbon-500">
+                    {fmtNumero(autonomia.enCurso.kmRecorridos)} km desde la última carga ·{' '}
+                    {fmtNumero(autonomia.enCurso.litrosConsumidos, 1)} L consumidos
                   </span>
                 </span>
                 <span className="num shrink-0 text-lg font-bold text-carbon-200">
-                  {fmtNumero(porMedidor.kmPorLitro, 2)}
+                  {fmtNumero(autonomia.enCurso.kmPorLitro, 2)}
                   <span className="ml-1 text-xs font-medium text-carbon-400">km/L</span>
                 </span>
               </CardBody>
@@ -208,142 +332,111 @@ export function CombustiblePage() {
           ) : null}
 
           <Suspense fallback={null}>
-            <GraficosCombustible cargas={cargas} />
+            <GraficosCombustible cargas={cargas} lecturas={lecturas} capacidad={capacidad} />
           </Suspense>
 
           <ul className="flex flex-col gap-3">
-            {timeline.map((item) =>
-              item.clase === 'lectura' ? (
-                <li key={item.id}>
-                  <Card className="border-dashed border-carbon-600 bg-carbon-850/50">
-                    <CardBody className="flex flex-col gap-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-1.5 text-sm font-semibold text-carbon-200">
-                            <Gauge size={14} className="shrink-0 text-carbon-400" />
-                            Medición del tanque
-                          </p>
-                          <p className="num text-xs text-carbon-400">
-                            {fmtFecha(item.lectura.fecha)} · {fmtNumero(item.lectura.km)} km
-                          </p>
+            {timeline.map((item) => {
+              if (item.clase === 'lectura') {
+                const l = item.lectura;
+                const paso = pasos.get(l.id);
+
+                return (
+                  <li key={item.id}>
+                    <Card className="border-dashed border-carbon-600 bg-carbon-850/50">
+                      <CardBody className="flex flex-col gap-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 text-sm font-semibold text-carbon-200">
+                              <Gauge size={14} className="shrink-0 text-carbon-400" />
+                              Medición del tanque
+                            </p>
+                            <p className="num text-xs text-carbon-400">
+                              {fmtFecha(l.fecha)} · {fmtNumero(l.km)} km
+                            </p>
+                          </div>
+                          <span className="num shrink-0 text-base font-bold text-carbon-200">
+                            {Math.round(l.nivel * 100)}%
+                            {capacidad ? (
+                              <span className="ml-1 text-xs font-normal text-carbon-400">
+                                ≈ {fmtNumero(l.nivel * capacidad, 1)} L
+                              </span>
+                            ) : null}
+                          </span>
                         </div>
-                        <span className="num shrink-0 text-base font-bold text-carbon-200">
-                          {Math.round(item.lectura.nivel * 100)}%
-                          {activo.capacidadTanque ? (
-                            <span className="ml-1 text-xs font-normal text-carbon-400">
-                              ≈ {fmtNumero(item.lectura.nivel * activo.capacidadTanque, 1)} L
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
 
-                      {item.lectura.nota ? (
-                        <p className="text-sm text-carbon-300">{item.lectura.nota}</p>
-                      ) : null}
+                        {paso ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <BadgeTramo tramo={paso} />
+                          </div>
+                        ) : null}
 
-                      <div className="flex gap-2 border-t border-carbon-700 pt-2">
-                        <Button
-                          variante="fantasma"
-                          tamanio="sm"
-                          icono={<Pencil size={14} />}
-                          onClick={() => {
-                            setEditandoLectura(item.lectura);
+                        {paso ? <AvisoDescarte tramo={paso} capacidad={capacidad} /> : null}
+
+                        {l.nota ? <p className="text-sm text-carbon-300">{l.nota}</p> : null}
+
+                        <AccionesItem
+                          onEditar={() => {
+                            setEditandoLectura(l);
                             setFormLectura(true);
                           }}
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variante="fantasma"
-                          tamanio="sm"
-                          icono={<Trash2 size={14} />}
-                          className="text-rojo-500 hover:bg-rojo-500/10 hover:text-rojo-500"
-                          onClick={() => setABorrar(item)}
-                        >
-                          Borrar
-                        </Button>
-                      </div>
-                    </CardBody>
-                  </Card>
-                </li>
-              ) : (
+                          onBorrar={() => setABorrar(item)}
+                        />
+                      </CardBody>
+                    </Card>
+                  </li>
+                );
+              }
+
+              const c = item.carga;
+              const ciclo = ciclosPorCarga.get(c.id);
+              // Los litros salidos del medidor son aproximados: lo dice el ≈.
+              const litros = `${c.estimada ? '≈ ' : ''}${fmtNumero(c.litros, 2)} L`;
+              const subtitulo = [
+                `${fmtDinero(c.precioPorLitro, 2)}/L`,
+                c.tipoCombustible ? etiquetaTipo(c.tipoCombustible) : null,
+                c.estacion,
+              ]
+                .filter(Boolean)
+                .join(' · ');
+
+              return (
                 <li key={item.id}>
                   <Card>
                     <CardBody className="flex flex-col gap-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="num text-sm font-semibold text-carbon-100">
-                            {fmtNumero(item.tramo.carga.litros, 2)} L ·{' '}
-                            {fmtDinero(item.tramo.carga.precioPorLitro, 2)}/L
+                            {fmtFecha(c.fecha)} · {litros} · {fmtNumero(c.km)} km
                           </p>
-                          <p className="num text-xs text-carbon-400">
-                            {fmtFecha(item.tramo.carga.fecha)} · {fmtNumero(item.tramo.carga.km)} km
-                            {item.tramo.carga.estacion ? ` · ${item.tramo.carga.estacion}` : ''}
-                          </p>
+                          <p className="num text-xs text-carbon-400">{subtitulo}</p>
                         </div>
                         <span className="num shrink-0 text-base font-bold text-ambar-400">
-                          {fmtDinero(item.tramo.carga.total)}
+                          {fmtDinero(c.total)}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {item.tramo.kmPorLitro != null ? (
-                          <Badge tono={item.tramo.confiable ? 'ok' : 'neutro'}>
-                            {fmtNumero(item.tramo.kmPorLitro, 2)} km/L
-                          </Badge>
-                        ) : null}
-                        {item.tramo.kmRecorridos != null && item.tramo.kmRecorridos > 0 ? (
-                          <Badge>{fmtNumero(item.tramo.kmRecorridos)} km recorridos</Badge>
-                        ) : null}
-                        {item.tramo.carga.tipoCombustible ? (
-                          <Badge
-                            tono={item.tramo.carga.tipoCombustible === 'premium' ? 'acento' : 'neutro'}
-                          >
-                            {etiquetaTipo(item.tramo.carga.tipoCombustible)}
-                          </Badge>
-                        ) : null}
-                        <Badge tono={item.tramo.carga.tanqueLleno ? 'ok' : 'neutro'}>
-                          {item.tramo.carga.tanqueLleno ? 'Tanque lleno' : 'Carga parcial'}
-                        </Badge>
-                        {item.tramo.carga.estimada ? (
-                          <Badge tono="alerta">Litros estimados</Badge>
-                        ) : null}
-                      </div>
-
-                      {!item.tramo.confiable && item.tramo.motivoNoConfiable ? (
-                        <p className="flex items-start gap-1.5 text-xs text-carbon-500">
-                          <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                          {item.tramo.motivoNoConfiable}
-                        </p>
+                      {ciclo || c.tanqueLleno ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {ciclo ? <BadgeTramo tramo={ciclo} /> : null}
+                          {c.tanqueLleno ? <Badge tono="ok">Tanque lleno</Badge> : null}
+                        </div>
                       ) : null}
 
-                      <div className="flex gap-2 border-t border-carbon-700 pt-2">
-                        <Button
-                          variante="fantasma"
-                          tamanio="sm"
-                          icono={<Pencil size={14} />}
-                          onClick={() => {
-                            setEditandoCarga(item.tramo.carga);
-                            setFormCarga(true);
-                          }}
-                        >
-                          Editar
-                        </Button>
-                        <Button
-                          variante="fantasma"
-                          tamanio="sm"
-                          icono={<Trash2 size={14} />}
-                          className="text-rojo-500 hover:bg-rojo-500/10 hover:text-rojo-500"
-                          onClick={() => setABorrar(item)}
-                        >
-                          Borrar
-                        </Button>
-                      </div>
+                      {ciclo ? <AvisoDescarte tramo={ciclo} capacidad={capacidad} /> : null}
+
+                      <AccionesItem
+                        onEditar={() => {
+                          setEditandoCarga(c);
+                          setFormCarga(true);
+                        }}
+                        onBorrar={() => setABorrar(item)}
+                      />
                     </CardBody>
                   </Card>
                 </li>
-              ),
-            )}
+              );
+            })}
           </ul>
         </>
       )}
@@ -356,7 +449,7 @@ export function CombustiblePage() {
         inicial={editandoCarga}
         kmSugerido={activo.kmActual}
         referencia={referencia}
-        capacidadTanque={activo.capacidadTanque}
+        capacidadTanque={capacidad}
         onGuardar={(c) => {
           if (c.id) editarCarga(c as CargaCombustible);
           else agregarCarga(c);
@@ -368,7 +461,7 @@ export function CombustiblePage() {
         onCerrar={() => setFormLectura(false)}
         inicial={editandoLectura}
         kmSugerido={activo.kmActual}
-        capacidadTanque={activo.capacidadTanque}
+        capacidadTanque={capacidad}
         onGuardar={(l) => {
           if (l.id) editarLectura(l as LecturaTanque);
           else agregarLectura(l);
@@ -382,7 +475,7 @@ export function CombustiblePage() {
           aBorrar?.clase === 'lectura'
             ? `Se elimina la medición del ${fmtFecha(aBorrar.fecha)}. Cambia el nivel estimado del tanque.`
             : aBorrar
-              ? `Se elimina la carga del ${fmtFecha(aBorrar.fecha)}. Los cálculos de autonomía de los tramos vecinos se recalculan.`
+              ? `Se elimina la carga del ${fmtFecha(aBorrar.fecha)}. Los ciclos de consumo vecinos se recalculan.`
               : ''
         }
         onCancelar={() => setABorrar(null)}

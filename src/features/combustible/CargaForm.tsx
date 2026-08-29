@@ -109,7 +109,7 @@ export function CargaForm({
       vehiculoId: inicial?.vehiculoId,
       fecha: b.fecha,
       km: Number(b.km),
-      litros: Number(litros.toFixed(2)),
+      litros: Number(litros.toFixed(3)),
       precioPorLitro: Number(precioPorLitro.toFixed(2)),
       total: Number(total.toFixed(2)),
       tipoCombustible: b.tipoCombustible,
