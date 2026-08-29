@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { NIVEL_RESERVA, enReserva } from '@/lib/calculos';
 import { fmtNumero } from '@/lib/format';
 
 const MARCAS = [
@@ -25,6 +26,7 @@ interface Props {
 export function NivelTanque({ label, valor, onChange, capacidad, tono = 'acento' }: Props) {
   const pct = Math.round(valor * 100);
   const litros = capacidad ? valor * capacidad : null;
+  const reserva = enReserva(valor);
 
   return (
     <div className="flex flex-col gap-2">
@@ -32,7 +34,12 @@ export function NivelTanque({ label, valor, onChange, capacidad, tono = 'acento'
         <span className="text-[11px] font-semibold uppercase tracking-wider text-carbon-400">
           {label}
         </span>
-        <span className="num text-sm font-semibold text-carbon-100">
+        <span
+          className={cn(
+            'num text-sm font-semibold',
+            reserva ? 'text-rojo-500' : 'text-carbon-100',
+          )}
+        >
           {pct}%
           {litros != null ? (
             <span className="ml-1 text-xs font-normal text-carbon-400">
@@ -43,11 +50,16 @@ export function NivelTanque({ label, valor, onChange, capacidad, tono = 'acento'
       </div>
 
       <div className="relative">
-        <div className="h-3 w-full overflow-hidden rounded-full bg-carbon-700">
+        <div className="relative h-3 w-full overflow-hidden rounded-full bg-carbon-700">
+          {/* Zona de reserva: el primer octavo del medidor va en rojo, como en el auto. */}
+          <div
+            className="absolute inset-y-0 left-0 bg-rojo-500/25"
+            style={{ width: `${NIVEL_RESERVA * 100}%` }}
+          />
           <div
             className={cn(
-              'h-full rounded-full transition-[width] duration-150',
-              tono === 'acento' ? 'bg-ambar-500' : 'bg-carbon-400',
+              'relative h-full rounded-full transition-[width] duration-150',
+              reserva ? 'bg-rojo-500' : tono === 'acento' ? 'bg-ambar-500' : 'bg-carbon-400',
             )}
             style={{ width: `${pct}%` }}
           />
@@ -76,7 +88,13 @@ export function NivelTanque({ label, valor, onChange, capacidad, tono = 'acento'
             onClick={() => onChange(m.valor)}
             className={cn(
               'num text-[11px] font-medium transition-colors',
-              Math.abs(valor - m.valor) < 0.001 ? 'text-ambar-400' : 'text-carbon-500',
+              Math.abs(valor - m.valor) < 0.001
+                ? reserva
+                  ? 'text-rojo-500'
+                  : 'text-ambar-400'
+                : enReserva(m.valor)
+                  ? 'text-rojo-500/60'
+                  : 'text-carbon-500',
             )}
           >
             {m.texto}

@@ -12,7 +12,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
-import { estadoTanque, resumenDashboard, type EstadoVTV } from '@/lib/calculos';
+import { enReserva, estadoTanque, resumenDashboard, type EstadoVTV } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtKm, fmtNumero, textoDias } from '@/lib/format';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/EmptyState';
@@ -163,7 +163,7 @@ export function DashboardPage() {
                 tono={
                   tanque.nivel == null
                     ? 'normal'
-                    : tanque.nivel <= 0.12
+                    : enReserva(tanque.nivel)
                       ? 'peligro'
                       : tanque.nivel <= 0.25
                         ? 'alerta'

@@ -3,7 +3,7 @@ import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 import { fmtFecha, fmtNumero } from '@/lib/format';
-import type { EstadoTanque } from '@/lib/calculos';
+import { NIVEL_RESERVA, enReserva, type EstadoTanque } from '@/lib/calculos';
 
 const MOTIVOS: Record<string, string> = {
   'sin-capacidad': 'Falta la capacidad del tanque en la ficha del vehículo.',
@@ -47,8 +47,8 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
   }
 
   const pct = Math.round((nivel ?? 0) * 100);
-  // Bajo un cuarto de tanque el aviso pasa a ámbar; en reserva, a rojo.
-  const tono = pct <= 12 ? 'peligro' : pct <= 25 ? 'alerta' : 'ok';
+  // Bajo un cuarto de tanque el aviso pasa a ámbar; en reserva (1/8), a rojo.
+  const tono = enReserva(nivel) ? 'peligro' : pct <= 25 ? 'alerta' : 'ok';
   const colorBarra =
     tono === 'peligro' ? 'bg-rojo-500' : tono === 'alerta' ? 'bg-ambar-500' : 'bg-verde-500';
   const colorTexto =
@@ -83,9 +83,14 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
           <span className="num ml-auto text-sm font-semibold text-carbon-300">{pct}%</span>
         </div>
 
-        <div className="h-3 w-full overflow-hidden rounded-full bg-carbon-700">
+        <div className="relative h-3 w-full overflow-hidden rounded-full bg-carbon-700">
+          {/* Zona de reserva: el primer octavo del medidor va en rojo, como en el auto. */}
           <div
-            className={cn('h-full rounded-full transition-[width]', colorBarra)}
+            className="absolute inset-y-0 left-0 bg-rojo-500/25"
+            style={{ width: `${NIVEL_RESERVA * 100}%` }}
+          />
+          <div
+            className={cn('relative h-full rounded-full transition-[width]', colorBarra)}
             style={{ width: `${pct}%` }}
           />
         </div>

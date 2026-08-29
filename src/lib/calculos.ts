@@ -427,6 +427,17 @@ export function resolucionMedidor(capacidad: number): number {
   return capacidad / DIVISIONES_MEDIDOR;
 }
 
+/**
+ * Primera muesca del medidor (1/8 ≈ 13 %): la zona roja donde el auto entra en
+ * reserva y se prende la luz. Se pinta igual en todos los medidores de la app.
+ */
+export const NIVEL_RESERVA = 1 / DIVISIONES_MEDIDOR;
+
+/** True si la aguja está en la muesca de reserva o por debajo. */
+export function enReserva(nivel: number | null | undefined): boolean {
+  return nivel != null && nivel <= NIVEL_RESERVA + 1e-6;
+}
+
 export type MotivoDescarte =
   /** Rendimiento fuera de lo posible: hay un dato mal cargado. */
   | 'implausible'

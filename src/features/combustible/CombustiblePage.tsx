@@ -13,6 +13,7 @@ import {
   estadoTanque,
   gastoCombustibleMes,
   litrosPor100km,
+  enReserva,
   pasosMedicion,
   precioPromedioPorLitro,
   resolucionMedidor,
@@ -500,7 +501,12 @@ export function CombustiblePage() {
                                 {fmtFecha(l.fecha)} · {fmtNumero(l.km)} km
                               </p>
                             </div>
-                            <span className="num shrink-0 text-base font-bold text-carbon-200">
+                            <span
+                              className={cn(
+                                'num shrink-0 text-base font-bold',
+                                enReserva(l.nivel) ? 'text-rojo-500' : 'text-carbon-200',
+                              )}
+                            >
                               {Math.round(l.nivel * 100)}%
                               {capacidad ? (
                                 <span className="ml-1 text-xs font-normal text-carbon-400">
