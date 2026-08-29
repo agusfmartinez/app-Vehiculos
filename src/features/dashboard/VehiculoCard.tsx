@@ -36,26 +36,29 @@ export function VehiculoCard() {
                 </p>
               </div>
             </div>
+            
+          </div>
+
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-carbon-400">
+                <Gauge size={13} />
+                Odómetro
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="num text-4xl font-bold tracking-tight text-ambar-400">
+                  {fmtNumero(kmActual)}
+                </span>
+                <span className="text-sm font-medium text-carbon-400">km</span>
+              </div>
+
+            </div>
             <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-ambar-400">
               <Car size={14} />
               Mi vehículo
               <ChevronRight size={16} />
             </span>
           </div>
-
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-carbon-400">
-            <Gauge size={13} />
-            Odómetro
-          </span>
-          <div className="flex items-baseline gap-2">
-            <span className="num text-4xl font-bold tracking-tight text-ambar-400">
-              {fmtNumero(kmActual)}
-            </span>
-            <span className="text-sm font-medium text-carbon-400">km</span>
-          </div>
-          <p className="mt-1 text-xs text-carbon-500">
-            Se actualiza con el último registro de km
-          </p>
         </div>
       </Card>
     </Link>

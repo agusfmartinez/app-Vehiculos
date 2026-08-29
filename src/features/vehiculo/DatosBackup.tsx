@@ -42,11 +42,6 @@ export function DatosBackup() {
       <Card>
         <CardHeader titulo="Copia de seguridad" />
         <CardBody className="flex flex-col gap-3 pt-3">
-          <p className="text-xs text-carbon-400">
-            Los datos viven sólo en este navegador. Si borrás los datos de navegación o cambiás de
-            celular, se pierden. Exportá el JSON cada tanto.
-          </p>
-
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               ancho

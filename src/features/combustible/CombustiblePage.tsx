@@ -451,7 +451,7 @@ export function CombustiblePage() {
 
               {autonomia.enCurso ? (
                 <Card className="border-carbon-600">
-                  <CardBody className="flex items-baseline justify-between gap-3">
+                  <CardBody className="flex items-center justify-between gap-3">
                     <span className="flex flex-col">
                       <span className="text-[11px] font-medium uppercase tracking-wider text-carbon-400">
                         Tanque en curso

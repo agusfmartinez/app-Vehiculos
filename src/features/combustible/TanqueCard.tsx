@@ -101,14 +101,6 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
             ~{fmtNumero(autonomiaRestante)} km
           </span>
         </div>
-
-        {referencia ? (
-          <p className="border-t border-carbon-700 pt-2 text-xs text-carbon-500">
-            Estimado desde {referencia.tipo === 'carga' ? 'la carga' : 'la medición'} del{' '}
-            {fmtFecha(referencia.fecha)} · {fmtNumero(kmDesdeReferencia)} km recorridos desde
-            entonces. Registrá una medición para corregirlo.
-          </p>
-        ) : null}
       </CardBody>
     </Card>
   );
