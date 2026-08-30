@@ -1,12 +1,14 @@
 # Tablero — Control de vehículo
 
-App web para llevar el mantenimiento, las cargas de combustible y la VTV de **uno o varios
-vehículos**. Solo frontend: **no hay backend, ni usuarios, ni base de datos**. Todo se guarda en
-el `localStorage` del navegador y se puede exportar/importar como archivo JSON.
+App web para llevar el mantenimiento, las cargas de combustible, el seguro y la VTV de **uno o
+varios vehículos**. Solo frontend, **sin servidor propio**: se entra con una cuenta de Google y
+los datos se guardan en Cloud Firestore, sincronizados entre todos los dispositivos de cada
+usuario. También se pueden exportar/importar como archivo JSON.
 
 ## Stack
 
 - Vite + React + TypeScript
+- Firebase (Authentication con Google + Cloud Firestore)
 - Tailwind CSS v4
 - react-router-dom
 - lucide-react (íconos)
@@ -16,8 +18,12 @@ el `localStorage` del navegador y se puede exportar/importar como archivo JSON.
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173
+cp .env.example .env.local   # completar con las credenciales de Firebase
+npm run dev                  # http://localhost:5173
 ```
+
+Sin las variables `VITE_FIREBASE_*` la app arranca pero muestra una pantalla de «Falta
+configurar Firebase» en vez del login. El paso a paso está en [Sincronización](#sincronización).
 
 Otros scripts:
 
@@ -29,10 +35,27 @@ npm run lint      # solo typecheck (tsc --noEmit)
 
 ## Cómo se guardan los datos
 
-Todo vive en una sola clave de `localStorage`: **`vehiculo-data-v1`** (el sufijo del nombre es
-histórico: identifica el slot, no el schema). El schema actual es **`version: 4`**. El hook
-[`useLocalStorage`](src/hooks/useLocalStorage.ts) escribe con *debounce* de 400 ms y hace un
-*flush* final al cerrar u ocultar la pestaña, así no se pierde el último cambio.
+Los datos viven en **Cloud Firestore**, colgados de la cuenta de Google con la que entrás. No
+hay servidor propio: el navegador habla directo con Firestore y las reglas de seguridad hacen
+de portero.
+
+```
+usuarios/{uid}                    → { vehiculoActivoId, version }
+usuarios/{uid}/vehiculos/{id}
+usuarios/{uid}/services/{id}
+usuarios/{uid}/cargas/{id}
+usuarios/{uid}/lecturas/{id}
+usuarios/{uid}/polizas/{id}
+usuarios/{uid}/vtv/{id}
+```
+
+**Un documento por registro**, no un JSON gigante en un solo doc. Es lo que hace que dos
+dispositivos que editan cosas distintas no se pisen, que un borrado se propague de verdad (el
+documento deja de existir, y «no está» no se confunde con «todavía no llegó») y que cada cambio
+suba unos pocos bytes en vez de todo el historial.
+
+En memoria la app sigue viendo la misma forma de siempre, armada por
+[`escucharDatos`](src/lib/nube.ts) a partir de los seis listeners:
 
 ```ts
 {
@@ -46,6 +69,13 @@ histórico: identifica el slot, no el schema). El schema actual es **`version: 4
   vtv: RegistroVTV[]
 }
 ```
+
+Firestore está configurado con **caché persistente** (`persistentLocalCache`), así que la app
+anda sin señal: lee de IndexedDB y encola las escrituras hasta que vuelve la conexión. Los
+cambios se ven en pantalla al instante, antes de que el servidor confirme.
+
+`localStorage` quedó para una sola cosa: si tenías datos cargados de la época sin cuentas, la
+primera vez que entrás se suben a tu cuenta (sólo si la cuenta está vacía) y después se ignora.
 
 ### Migraciones
 
@@ -62,9 +92,46 @@ cambia.
 
 Es idempotente: volver a migrar no cambia nada.
 
-> **Importante:** si borrás los datos de navegación o cambiás de dispositivo, los datos se
-> pierden. Usá **Vehículos → Copia de seguridad → Exportar backup** cada tanto. El backup
-> incluye todos los vehículos, no sólo el activo.
+Los backups siguen andando: **Vehículos → Copia de seguridad**. Exportar baja un JSON con todos
+los vehículos; importar **reemplaza** todo lo que haya en la cuenta.
+
+## Sincronización
+
+Cada usuario entra con Google y ve únicamente sus propios vehículos. No hay cuentas compartidas
+ni vehículos de varios dueños: los datos cuelgan del `uid`, que es lo que hace que las reglas de
+seguridad sean cortas y difíciles de equivocar.
+
+### Armar el proyecto de Firebase
+
+1. En [console.firebase.google.com](https://console.firebase.google.com) crear un proyecto.
+2. **Build → Authentication → Sign-in method → Google**: habilitar.
+3. **Authentication → Settings → Authorized domains**: agregar `localhost` y el dominio de
+   Vercel (`tu-app.vercel.app` y el propio si tenés uno). Sin esto el login tira
+   `auth/unauthorized-domain`.
+4. **Build → Firestore Database → Crear base de datos**, en modo producción.
+5. **Firestore → Reglas**: pegar el contenido de [`firestore.rules`](firestore.rules) y publicar.
+6. **Configuración del proyecto → Tus apps → Web**: registrar una app y copiar los valores del
+   SDK a `.env.local` (ver [`.env.example`](.env.example)).
+
+Las claves `VITE_FIREBASE_*` son públicas por diseño: identifican al proyecto, no dan permisos.
+Lo único que protege los datos son las reglas.
+
+### Las reglas
+
+```
+match /usuarios/{uid} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+  match /{coleccion}/{documento} { ... mismo dueño ... }
+}
+```
+
+Sin sesión no se lee ni se escribe nada, y con sesión sólo la rama propia.
+
+### Sin conexión
+
+La caché persistente de Firestore hace que la app funcione sin señal: los cambios se aplican en
+pantalla al instante y quedan encolados hasta que vuelve la conexión. La card **Tu cuenta**
+(en Vehículos) muestra el estado: sincronizado, sin conexión o error.
 
 ## Secciones
 
@@ -300,7 +367,9 @@ consumo.
 
 ## Deploy en Vercel
 
-El proyecto es una app estática, sin variables de entorno ni configuración extra.
+El proyecto es una app estática. Lo único que necesita son las variables `VITE_FIREBASE_*`
+cargadas en *Settings → Environment Variables* (las mismas de `.env.local`). Ojo: Vite las
+compila al hacer el build, así que después de cambiarlas hay que **redeployar**.
 
 **Desde la web:**
 
@@ -326,15 +395,18 @@ src/
 ├── components/
 │   ├── layout/       AppShell, BottomNav, SelectorVehiculo
 │   └── ui/           Card, Button, Input, Modal, EmptyState
-├── context/          DatosContext (estado global + CRUD multi-vehículo)
+├── context/          AuthContext (sesión), DatosContext (estado global + CRUD)
 ├── data/             catalogo (modelos AR), intervalos (próximo service)
 ├── features/
+│   ├── auth/         LoginPage
 │   ├── dashboard/
 │   ├── vehiculo/
 │   ├── services/
 │   ├── combustible/
+│   ├── seguro/
 │   └── vtv/
-├── hooks/            useLocalStorage
-├── lib/              calculos, format, storage, cn
+├── hooks/            useEnLinea
+├── lib/              calculos, format, storage, periodos, cn,
+│                     firebase (auth), db (firestore), nube (colecciones)
 └── types/            modelos e interfaces
 ```

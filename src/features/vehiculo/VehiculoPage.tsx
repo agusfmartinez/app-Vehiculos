@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/EmptyState';
 import { ConfirmarBorrado } from '@/components/ui/Modal';
+import { CuentaCard } from '@/features/vehiculo/CuentaCard';
 import { DatosBackup } from '@/features/vehiculo/DatosBackup';
 import { VehiculoForm } from '@/features/vehiculo/VehiculoForm';
 import { CARROCERIAS, type Vehiculo } from '@/types';
@@ -134,6 +135,8 @@ export function VehiculoPage() {
           </CardBody>
         </Card>
       ) : null}
+
+      <CuentaCard />
 
       <DatosBackup />
 

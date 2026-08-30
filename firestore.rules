@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Cada usuario es dueño exclusivo de su rama. No hay lectura cruzada entre
+// cuentas ni acceso anónimo: sin sesión, nada.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /usuarios/{uid} {
+      allow read, write: if esDuenio(uid);
+
+      // Vehículos y todos los registros que cuelgan de ellos.
+      match /{coleccion}/{documento} {
+        allow read, write: if esDuenio(uid)
+                           && coleccion in ['vehiculos', 'services', 'cargas',
+                                            'lecturas', 'polizas', 'vtv'];
+      }
+    }
+
+    function esDuenio(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

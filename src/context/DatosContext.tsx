@@ -1,5 +1,25 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { db } from '@/lib/db';
+import {
+  borrarRegistro,
+  borrarTodoEnNube,
+  borrarVehiculoEnCascada,
+  escucharDatos,
+  guardarPreferencias,
+  guardarRegistro,
+  nubeVacia,
+  reemplazarTodoEnNube,
+  type Coleccion,
+} from '@/lib/nube';
 import { datosIniciales, migrar, nuevoId } from '@/lib/storage';
 import {
   STORAGE_KEY,
@@ -14,9 +34,15 @@ import {
 
 type SinIds<T> = Omit<T, 'id' | 'vehiculoId'>;
 
+/** Marca que lo que había en este navegador ya se subió a alguna cuenta. */
+const CLAVE_MIGRADO = 'vehiculo-data-migrado-a-nube';
+
 interface DatosContextValue {
   data: VehiculoData;
-  setData: (a: VehiculoData | ((prev: VehiculoData) => VehiculoData)) => void;
+  /** True mientras llega la primera respuesta de Firestore. */
+  cargando: boolean;
+  /** Mensaje de error de la nube, o null si todo va bien. */
+  error: string | null;
 
   /** Vehículo seleccionado; null si todavía no hay ninguno cargado. */
   activo: Vehiculo | null;
@@ -64,11 +90,77 @@ interface DatosContextValue {
 
 const DatosContext = createContext<DatosContextValue | null>(null);
 
+/** Lo que quedó guardado en este navegador de la época sin cuentas. */
+function datosLocalesViejos(): VehiculoData | null {
+  try {
+    if (localStorage.getItem(CLAVE_MIGRADO)) return null;
+    const crudo = localStorage.getItem(STORAGE_KEY);
+    if (!crudo) return null;
+    const datos = migrar(JSON.parse(crudo));
+    return datos.vehiculos.length > 0 ? datos : null;
+  } catch {
+    return null;
+  }
+}
+
 export function DatosProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useLocalStorage<VehiculoData>(STORAGE_KEY, datosIniciales, {
-    debounceMs: 400,
-    migrar,
-  });
+  const { usuario } = useAuth();
+  const uid = usuario?.uid ?? null;
+
+  const [data, setData] = useState<VehiculoData>(datosIniciales);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!db || !uid) return;
+    setCargando(true);
+    setError(null);
+
+    const cortar = escucharDatos(db, uid, {
+      onDatos: (d) => {
+        setData(d);
+        setCargando(false);
+      },
+      onError: (e) => {
+        // Sin permisos o sin red: la caché local sigue sirviendo lo último.
+        setError(
+          e.message.includes('permission')
+            ? 'La cuenta no tiene permiso para leer estos datos. Revisá las reglas de Firestore.'
+            : 'No se pudo sincronizar con la nube. Los cambios se guardan y se suben al volver la conexión.',
+        );
+        setCargando(false);
+      },
+    });
+
+    return cortar;
+  }, [uid]);
+
+  /*
+   * Una sola vez por navegador: lo que estaba en localStorage antes de que la
+   * app tuviera cuentas se sube a la cuenta con la que entrás, si esa cuenta
+   * todavía está vacía. Después el localStorage deja de usarse.
+   */
+  useEffect(() => {
+    if (!db || !uid || cargando) return;
+    const viejos = datosLocalesViejos();
+    if (!viejos) return;
+
+    let cancelado = false;
+    (async () => {
+      try {
+        if (!(await nubeVacia(db!, uid))) return;
+        if (cancelado) return;
+        await reemplazarTodoEnNube(db!, uid, viejos);
+        localStorage.setItem(CLAVE_MIGRADO, new Date().toISOString());
+      } catch {
+        // Si falla, se reintenta en la próxima carga: nada se pierde.
+      }
+    })();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [uid, cargando]);
 
   const activo = useMemo(
     () => data.vehiculos.find((v) => v.id === data.vehiculoActivoId) ?? null,
@@ -99,14 +191,15 @@ export function DatosProvider({ children }: { children: ReactNode }) {
 
   // El odómetro sale del registro más alto: un service o una carga con más km
   // que el guardado significa que el auto ya pasó por ahí.
-  const kmRegistrados = useMemo(() => {
-    const todos = [
-      ...services.map((s) => s.km),
-      ...cargas.map((c) => c.km),
-      ...lecturas.map((l) => l.km),
-    ].filter((k) => Number.isFinite(k) && k > 0);
-    return todos;
-  }, [services, cargas, lecturas]);
+  const kmRegistrados = useMemo(
+    () =>
+      [
+        ...services.map((s) => s.km),
+        ...cargas.map((c) => c.km),
+        ...lecturas.map((l) => l.km),
+      ].filter((k) => Number.isFinite(k) && k > 0),
+    [services, cargas, lecturas],
+  );
 
   const kmMaxRegistrado = kmRegistrados.length ? Math.max(...kmRegistrados) : 0;
   const kmMinRegistrado = kmRegistrados.length ? Math.min(...kmRegistrados) : null;
@@ -116,42 +209,52 @@ export function DatosProvider({ children }: { children: ReactNode }) {
    * del vehículo se adelanta solo: si estuviste en el taller con 82.400 km,
    * el auto tiene al menos 82.400 km.
    */
-  const conKmSincronizado = useCallback(
-    (d: VehiculoData, vehiculoId: string, km: number): VehiculoData => {
-      if (!Number.isFinite(km)) return d;
-      return {
-        ...d,
-        vehiculos: d.vehiculos.map((v) =>
-          v.id === vehiculoId && km > v.kmActual ? { ...v, kmActual: km } : v,
-        ),
-      };
+  const sincronizarKm = useCallback(
+    (vehiculoId: string, km: number) => {
+      if (!db || !uid || !Number.isFinite(km)) return;
+      const vehiculo = data.vehiculos.find((v) => v.id === vehiculoId);
+      if (!vehiculo || km <= vehiculo.kmActual) return;
+      void guardarRegistro(db, uid, 'vehiculos', { ...vehiculo, kmActual: km });
     },
-    [],
+    [uid, data.vehiculos],
   );
 
   const value = useMemo<DatosContextValue>(() => {
-    /** Alta genérica: asocia el registro al vehículo activo. */
+    /** Escribe un registro, con el vehículo activo ya asociado. */
+    const guardar = <T extends { id: string }>(nombre: Coleccion, registro: T) => {
+      if (!db || !uid) return;
+      void guardarRegistro(db, uid, nombre, registro);
+    };
+
+    const borrar = (nombre: Coleccion, id: string) => {
+      if (!db || !uid) return;
+      void borrarRegistro(db, uid, nombre, id);
+    };
+
+    /** Alta genérica: le pone id nuevo y lo cuelga del vehículo activo. */
     const alta =
-      <T extends object>(
-        clave: 'services' | 'cargasCombustible' | 'lecturasTanque' | 'polizas' | 'vtv',
-      ) =>
+      <T extends object>(nombre: Coleccion) =>
       (registro: T) => {
         if (!activoId) return;
-        setData((d) => {
-          const nuevo = { ...registro, id: nuevoId(), vehiculoId: activoId };
-          const conRegistro = {
-            ...d,
-            [clave]: [...(d[clave] as unknown[]), nuevo],
-          } as VehiculoData;
-          // Sólo services y cargas traen kilometraje con el que sincronizar.
-          const km = (registro as { km?: number }).km;
-          return km != null ? conKmSincronizado(conRegistro, activoId, km) : conRegistro;
-        });
+        const nuevo = { ...registro, id: nuevoId(), vehiculoId: activoId };
+        guardar(nombre, nuevo);
+        // Sólo services, cargas y mediciones traen kilometraje.
+        const km = (registro as { km?: number }).km;
+        if (km != null) sincronizarKm(activoId, km);
+      };
+
+    /** Edición: además del registro, puede adelantar el odómetro. */
+    const edicion =
+      <T extends { id: string; vehiculoId: string; km: number }>(nombre: Coleccion) =>
+      (registro: T) => {
+        guardar(nombre, registro);
+        sincronizarKm(registro.vehiculoId, registro.km);
       };
 
     return {
       data,
-      setData,
+      cargando,
+      error,
       activo,
       vehiculos: data.vehiculos,
       services,
@@ -162,105 +265,69 @@ export function DatosProvider({ children }: { children: ReactNode }) {
       kmMaxRegistrado,
       kmMinRegistrado,
 
-      seleccionarVehiculo: (id) => setData((d) => ({ ...d, vehiculoActivoId: id })),
+      seleccionarVehiculo: (id) => {
+        if (!db || !uid) return;
+        void guardarPreferencias(db, uid, { vehiculoActivoId: id });
+      },
 
       agregarVehiculo: (v) => {
         const id = nuevoId();
-        setData((d) => ({
-          ...d,
-          vehiculos: [...d.vehiculos, { ...v, id }],
-          vehiculoActivoId: id,
-        }));
+        guardar('vehiculos', { ...v, id });
+        if (db && uid) void guardarPreferencias(db, uid, { vehiculoActivoId: id });
         return id;
       },
 
-      editarVehiculo: (v) =>
-        setData((d) => ({
-          ...d,
-          vehiculos: d.vehiculos.map((x) => (x.id === v.id ? v : x)),
-        })),
+      editarVehiculo: (v) => guardar('vehiculos', v),
 
       /** Borra el vehículo y todos sus registros asociados. */
-      borrarVehiculo: (id) =>
-        setData((d) => {
-          const vehiculos = d.vehiculos.filter((v) => v.id !== id);
-          return {
-            ...d,
-            vehiculos,
-            vehiculoActivoId:
-              d.vehiculoActivoId === id ? (vehiculos[0]?.id ?? null) : d.vehiculoActivoId,
-            services: d.services.filter((s) => s.vehiculoId !== id),
-            cargasCombustible: d.cargasCombustible.filter((c) => c.vehiculoId !== id),
-            lecturasTanque: d.lecturasTanque.filter((l) => l.vehiculoId !== id),
-            polizas: d.polizas.filter((p) => p.vehiculoId !== id),
-            vtv: d.vtv.filter((v) => v.vehiculoId !== id),
-          };
-        }),
+      borrarVehiculo: (id) => {
+        if (!db || !uid) return;
+        void borrarVehiculoEnCascada(db, uid, id).then(() => {
+          if (data.vehiculoActivoId !== id) return;
+          const otro = data.vehiculos.find((v) => v.id !== id)?.id ?? null;
+          void guardarPreferencias(db!, uid, { vehiculoActivoId: otro });
+        });
+      },
 
-      setKmActual: (km) =>
-        setData((d) => ({
-          ...d,
-          vehiculos: d.vehiculos.map((v) =>
-            v.id === activoId ? { ...v, kmActual: Math.max(0, km) } : v,
-          ),
-        })),
+      setKmActual: (km) => {
+        if (!activo) return;
+        guardar('vehiculos', { ...activo, kmActual: Math.max(0, km) });
+      },
 
       agregarService: alta<SinIds<Service>>('services'),
-      editarService: (s) =>
-        setData((d) =>
-          conKmSincronizado(
-            { ...d, services: d.services.map((x) => (x.id === s.id ? s : x)) },
-            s.vehiculoId,
-            s.km,
-          ),
-        ),
-      borrarService: (id) =>
-        setData((d) => ({ ...d, services: d.services.filter((x) => x.id !== id) })),
+      editarService: edicion<Service>('services'),
+      borrarService: (id) => borrar('services', id),
 
-      agregarCarga: alta<SinIds<CargaCombustible>>('cargasCombustible'),
-      editarCarga: (c) =>
-        setData((d) =>
-          conKmSincronizado(
-            { ...d, cargasCombustible: d.cargasCombustible.map((x) => (x.id === c.id ? c : x)) },
-            c.vehiculoId,
-            c.km,
-          ),
-        ),
-      borrarCarga: (id) =>
-        setData((d) => ({
-          ...d,
-          cargasCombustible: d.cargasCombustible.filter((x) => x.id !== id),
-        })),
+      agregarCarga: alta<SinIds<CargaCombustible>>('cargas'),
+      editarCarga: edicion<CargaCombustible>('cargas'),
+      borrarCarga: (id) => borrar('cargas', id),
 
-      agregarLectura: alta<SinIds<LecturaTanque>>('lecturasTanque'),
-      editarLectura: (l) =>
-        setData((d) =>
-          conKmSincronizado(
-            { ...d, lecturasTanque: d.lecturasTanque.map((x) => (x.id === l.id ? l : x)) },
-            l.vehiculoId,
-            l.km,
-          ),
-        ),
-      borrarLectura: (id) =>
-        setData((d) => ({ ...d, lecturasTanque: d.lecturasTanque.filter((x) => x.id !== id) })),
+      agregarLectura: alta<SinIds<LecturaTanque>>('lecturas'),
+      editarLectura: edicion<LecturaTanque>('lecturas'),
+      borrarLectura: (id) => borrar('lecturas', id),
 
       agregarPoliza: alta<SinIds<Poliza>>('polizas'),
-      editarPoliza: (p) =>
-        setData((d) => ({ ...d, polizas: d.polizas.map((x) => (x.id === p.id ? p : x)) })),
-      borrarPoliza: (id) =>
-        setData((d) => ({ ...d, polizas: d.polizas.filter((x) => x.id !== id) })),
+      editarPoliza: (p) => guardar('polizas', p),
+      borrarPoliza: (id) => borrar('polizas', id),
 
       agregarVtv: alta<SinIds<RegistroVTV>>('vtv'),
-      editarVtv: (v) =>
-        setData((d) => ({ ...d, vtv: d.vtv.map((x) => (x.id === v.id ? v : x)) })),
-      borrarVtv: (id) => setData((d) => ({ ...d, vtv: d.vtv.filter((x) => x.id !== id) })),
+      editarVtv: (v) => guardar('vtv', v),
+      borrarVtv: (id) => borrar('vtv', id),
 
-      reemplazarTodo: (d) => setData(migrar(d)),
-      borrarTodo: () => setData(datosIniciales),
+      reemplazarTodo: (d) => {
+        if (!db || !uid) return;
+        void reemplazarTodoEnNube(db, uid, migrar(d));
+      },
+      borrarTodo: () => {
+        if (!db || !uid) return;
+        void borrarTodoEnNube(db, uid);
+      },
     };
   }, [
     data,
-    setData,
+    cargando,
+    error,
+    uid,
     activo,
     activoId,
     services,
@@ -270,7 +337,7 @@ export function DatosProvider({ children }: { children: ReactNode }) {
     vtv,
     kmMaxRegistrado,
     kmMinRegistrado,
-    conKmSincronizado,
+    sincronizarKm,
   ]);
 
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
