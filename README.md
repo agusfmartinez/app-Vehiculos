@@ -1,4 +1,4 @@
-# Tablero — Control de vehículo
+# CuentaKM
 
 App web para llevar el mantenimiento, las cargas de combustible, el seguro y la VTV de **uno o
 varios vehículos**. Solo frontend, **sin servidor propio**: se entra con una cuenta de Google y
