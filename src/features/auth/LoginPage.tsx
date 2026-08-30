@@ -70,11 +70,6 @@ export function LoginPage() {
                 {error}
               </p>
             ) : null}
-
-            <p className="text-xs leading-relaxed text-carbon-500">
-              Usamos tu cuenta sólo para identificarte y guardar tus registros. Cada usuario ve
-              únicamente sus propios vehículos.
-            </p>
           </CardBody>
         </Card>
       </div>
