@@ -161,6 +161,25 @@ línea por tipo en vez de una sola: mezclar súper y premium en una serie hace v
 que no existen. Las cargas guardadas antes de que existiera este campo se agrupan aparte como
 "Sin especificar" — no se les asume un tipo.
 
+### La aguja antes de cargar es obligatoria
+
+Toda carga pide **en qué nivel estaba la aguja antes de cargar**, incluso cargando por ticket. El
+nivel final no se pregunta: se calcula.
+
+```
+nivelDespues = tanqueLleno ? 1 : min(1, nivelAntes + litros / capacidad)
+```
+
+Sin ese dato, una carga parcial deja el tanque en un nivel desconocido: no sirve de referencia
+para el nivel actual ni de extremo para medir consumo, y obligaba a cargar dos registros (una
+medición y después la carga) para lo que es un solo evento.
+
+Esto da lo mejor de los dos modos: los **litros exactos del ticket** con un **nivel final
+conocido**. La única lectura de aguja es la previa, y su error queda acotado a media muesca.
+
+Marcar **"Tanque lleno"** sigue siendo el mejor caso: el nivel final es 1 porque cortó el
+surtidor, sin depender de la aguja, y dos cargas llenas seguidas dan un consumo exacto.
+
 ## Nivel del tanque y mediciones
 
 Se puede registrar el **nivel de la aguja sin cargar nafta**: fecha, kilometraje y posición del
@@ -173,10 +192,11 @@ litros = nivelReferencia × capacidad
        − (kmActual − kmReferencia) / (km por litro)
 ```
 
-La *referencia* es el evento más reciente cuyo nivel se conoce con certeza: una medición, una
-carga a tanque lleno, o una carga estimada con el medidor. Una carga parcial cargada por ticket
-**no** sirve de referencia — sabe cuántos litros entraron, pero no en qué nivel quedó la aguja.
-El resultado se recorta siempre a `[0, capacidad]`.
+La *referencia* es el evento más reciente con nivel conocido: una medición, o cualquier carga —
+desde que la aguja previa es obligatoria, toda carga sabe en qué nivel quedó el tanque. El
+resultado se recorta siempre a `[0, capacidad]`. Las cargas viejas, guardadas antes de esa regla
+y sin marcar como tanque lleno, siguen sin servir de referencia: sus litros se suman al balance,
+pero no fijan un nivel.
 
 Necesita dos cosas: la capacidad del tanque (ficha del vehículo) y una autonomía medida. Cuando
 falta alguna, la app dice cuál en vez de mostrar un número inventado.

@@ -31,7 +31,8 @@ interface Borrador {
   tipoCombustible: TipoCombustible;
   estacion: string;
   tanqueLleno: boolean;
-  nivelAntes: number;
+  /** null hasta que se marca: no hay default razonable para la aguja. */
+  nivelAntes: number | null;
   nivelDespues: number;
 }
 
@@ -44,7 +45,7 @@ function borradorDesde(c: CargaCombustible | undefined, kmSugerido: number): Bor
     tipoCombustible: c?.tipoCombustible ?? 'super',
     estacion: c?.estacion ?? '',
     tanqueLleno: c?.tanqueLleno ?? true,
-    nivelAntes: c?.nivelAntes ?? 0.25,
+    nivelAntes: c?.nivelAntes ?? null,
     nivelDespues: c?.nivelDespues ?? 1,
   };
 }
@@ -76,7 +77,7 @@ export function CargaForm({
 
   // En modo medidor los litros salen de cuánto subió la aguja por la capacidad.
   const litrosEstimados =
-    capacidadTanque && b.nivelDespues > b.nivelAntes
+    capacidadTanque && b.nivelAntes != null && b.nivelDespues > b.nivelAntes
       ? (b.nivelDespues - b.nivelAntes) * capacidadTanque
       : 0;
 
@@ -85,11 +86,30 @@ export function CargaForm({
   // El precio unitario se deduce: es lo que sale del ticket dividido los litros.
   const precioPorLitro = litros > 0 && total > 0 ? total / litros : 0;
 
+  /*
+   * Con los litros del ticket la aguja final no hace falta mirarla: sale de
+   * sumar lo cargado al nivel de partida. Por eso la aguja previa es
+   * obligatoria — sin ella no se sabe en qué nivel quedó el tanque y la carga
+   * no sirve como referencia.
+   */
+  const subeTicket = capacidadTanque && litros > 0 ? litros / capacidadTanque : 0;
+  const nivelDespuesTicket =
+    b.tanqueLleno
+      ? 1
+      : b.nivelAntes != null && subeTicket > 0
+        ? Math.min(1, b.nivelAntes + subeTicket)
+        : null;
+
+  /** Cargó más litros de los que entran: hay un dato mal. */
+  const seDesborda =
+    !b.tanqueLleno && b.nivelAntes != null && subeTicket > 0 && b.nivelAntes + subeTicket > 1.02;
+
   const validar = (): boolean => {
     const e: Record<string, string> = {};
     if (!b.fecha) e.fecha = 'Poné la fecha de la carga.';
     const km = Number(b.km);
     if (!b.km || !Number.isFinite(km) || km < 0) e.km = 'Kilometraje inválido.';
+    if (b.nivelAntes == null) e.nivelAntes = 'Marcá cómo estaba la aguja antes de cargar.';
     if (!(litros > 0)) {
       e.litros =
         modo === 'medidor'
@@ -118,8 +138,8 @@ export function CargaForm({
       // que la aguja haya quedado efectivamente en F.
       tanqueLleno: esMedidor ? b.nivelDespues >= 0.999 : b.tanqueLleno,
       estimada: esMedidor || undefined,
-      nivelAntes: esMedidor ? b.nivelAntes : undefined,
-      nivelDespues: esMedidor ? b.nivelDespues : undefined,
+      nivelAntes: b.nivelAntes ?? undefined,
+      nivelDespues: esMedidor ? b.nivelDespues : (nivelDespuesTicket ?? undefined),
     });
     onCerrar();
   };
@@ -213,19 +233,61 @@ export function CargaForm({
         </div>
 
         {modo === 'ticket' ? (
-          <Input
-            label="Litros cargados"
-            mono
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            sufijo="L"
-            value={b.litros}
-            onChange={(e) => set('litros', e.target.value)}
-            placeholder="0.00"
-            error={errores.litros}
-            hint="El número exacto sale del ticket del surtidor."
-          />
+          <div className="flex flex-col gap-4">
+            <Input
+              label="Litros cargados"
+              mono
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              sufijo="L"
+              value={b.litros}
+              onChange={(e) => set('litros', e.target.value)}
+              placeholder="0.00"
+              error={errores.litros}
+              hint="El número exacto sale del ticket del surtidor."
+            />
+
+            <div className="flex flex-col gap-3 rounded-xl border border-carbon-600 bg-carbon-850 p-3">
+              <NivelTanque
+                label="Aguja antes de cargar"
+                valor={b.nivelAntes}
+                onChange={(v) => set('nivelAntes', v)}
+                capacidad={capacidadTanque}
+                tono="neutro"
+                error={errores.nivelAntes}
+              />
+              <p className="flex items-start gap-2 text-xs text-carbon-500">
+                <Info size={13} className="mt-0.5 shrink-0 text-ambar-400" />
+                Sin este dato no se sabe en qué nivel quedó el tanque después de cargar, y la
+                carga no sirve como referencia para el nivel actual ni para el consumo.
+              </p>
+
+              {nivelDespuesTicket != null ? (
+                <div className="flex items-baseline justify-between border-t border-carbon-700 pt-3">
+                  <span className="text-xs uppercase tracking-wider text-carbon-400">
+                    Queda en
+                  </span>
+                  <span className="num text-lg font-bold text-ambar-400">
+                    {Math.round(nivelDespuesTicket * 100)}%
+                    {capacidadTanque ? (
+                      <span className="ml-1 text-xs font-normal text-carbon-400">
+                        ≈ {fmtNumero(nivelDespuesTicket * capacidadTanque, 1)} L
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+
+              {seDesborda ? (
+                <p className="flex items-start gap-2 rounded-lg bg-rojo-500/10 px-2 py-1.5 text-xs text-rojo-500">
+                  <Info size={13} className="mt-0.5 shrink-0" />
+                  Con esos litros el tanque se pasa de los {fmtNumero(capacidadTanque)} L. Revisá
+                  la aguja, los litros, o marcá «Tanque lleno».
+                </p>
+              ) : null}
+            </div>
+          </div>
         ) : (
           <div className="flex flex-col gap-4 rounded-xl border border-carbon-600 bg-carbon-850 p-3">
             <p className="flex items-start gap-2 text-xs text-carbon-400">
@@ -239,6 +301,7 @@ export function CargaForm({
               onChange={(v) => set('nivelAntes', v)}
               capacidad={capacidadTanque}
               tono="neutro"
+              error={errores.nivelAntes}
             />
             <NivelTanque
               label="Aguja después de cargar"
@@ -300,7 +363,7 @@ export function CargaForm({
         {modo === 'ticket' ? (
           <Toggle
             label="Tanque lleno"
-            descripcion="Necesario en dos cargas seguidas para calcular la autonomía real."
+            descripcion="Cortó el surtidor: la aguja queda en F. Dos cargas llenas seguidas dan el consumo exacto."
             checked={b.tanqueLleno}
             onChange={(v) => set('tanqueLleno', v)}
           />

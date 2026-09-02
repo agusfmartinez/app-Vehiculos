@@ -567,10 +567,17 @@ export function CombustiblePage() {
                           </span>
                         </div>
 
-                        {ciclo || c.tanqueLleno ? (
+                        {ciclo || c.tanqueLleno || c.nivelAntes != null ? (
                           <div className="flex flex-wrap items-center gap-2">
                             {ciclo ? <BadgeTramo tramo={ciclo} /> : null}
                             {c.tanqueLleno ? <Badge tono="ok">Tanque lleno</Badge> : null}
+                            {/* De cuánto a cuánto quedó la aguja con esta carga. */}
+                            {c.nivelAntes != null && c.nivelDespues != null ? (
+                              <Badge tono={enReserva(c.nivelAntes) ? 'peligro' : 'neutro'}>
+                                {Math.round(c.nivelAntes * 100)}% →{' '}
+                                {Math.round(c.nivelDespues * 100)}%
+                              </Badge>
+                            ) : null}
                           </div>
                         ) : null}
 

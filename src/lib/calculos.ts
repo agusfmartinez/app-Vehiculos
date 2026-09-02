@@ -265,20 +265,22 @@ export function eventosTanque(
   cargas: CargaCombustible[],
   lecturas: LecturaTanque[],
 ): EventoTanque[] {
-  const deCargas: EventoTanque[] = cargas.map((c) => {
-    const nivelDelMedidor = Boolean(c.estimada) && c.nivelDespues != null;
-    return {
-      id: c.id,
-      km: c.km,
-      fecha: c.fecha,
-      tipo: 'carga' as const,
-      litrosCargados: c.litros,
-      nivelResultante: c.tanqueLleno ? 1 : (nivelDelMedidor ? c.nivelDespues! : null),
-      // Si los litros salieron del medidor, el tramo es estimado aunque la
-      // aguja haya terminado en F: los litros mismos son una aproximación.
-      nivelDeMedidor: Boolean(c.estimada),
-    };
-  });
+  const deCargas: EventoTanque[] = cargas.map((c) => ({
+    id: c.id,
+    km: c.km,
+    fecha: c.fecha,
+    tipo: 'carga' as const,
+    litrosCargados: c.litros,
+    /*
+     * Tanque lleno es el único nivel exacto. Si no, el nivel post-carga sale
+     * de la aguja previa más lo cargado (`nivelDespues`, que el formulario
+     * calcula), y arrastra el error de haber leído la aguja.
+     */
+    nivelResultante: c.tanqueLleno ? 1 : (c.nivelDespues ?? null),
+    // Estimado si los litros salieron del medidor, o si el nivel final se
+    // apoya en una lectura de aguja en vez del corte del surtidor.
+    nivelDeMedidor: Boolean(c.estimada) || !c.tanqueLleno,
+  }));
 
   const deLecturas: EventoTanque[] = lecturas.map((l) => ({
     id: l.id,
