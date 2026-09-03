@@ -53,12 +53,15 @@ export function VtvForm({ abierto, onCerrar, onGuardar, inicial }: Props) {
   const [b, setB] = useState<Borrador>(() => borradorDesde(inicial));
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const [claveAbierta, setClaveAbierta] = useState('');
-  const claveActual = `${abierto}-${inicial?.id ?? 'nuevo'}`;
-  if (abierto && claveAbierta !== claveActual) {
-    setClaveAbierta(claveActual);
+  // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
+  // el id, reabrir para otra alta nueva no refrescaba el borrador.
+  const [abiertoAntes, setAbiertoAntes] = useState(false);
+  if (abierto && !abiertoAntes) {
+    setAbiertoAntes(true);
     setB(borradorDesde(inicial));
     setErrores({});
+  } else if (!abierto && abiertoAntes) {
+    setAbiertoAntes(false);
   }
 
   const onFechaRealizada = (valor: string) => {
@@ -110,10 +113,10 @@ export function VtvForm({ abierto, onCerrar, onGuardar, inicial }: Props) {
       titulo={inicial ? 'Editar VTV' : 'Nueva VTV'}
       pie={
         <>
-          <Button ancho onClick={onCerrar}>
+          <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
             Guardar
           </Button>
         </>

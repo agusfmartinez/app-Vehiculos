@@ -57,12 +57,15 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
   const [b, setB] = useState<Borrador>(() => borradorDesde(inicial, kmSugerido));
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const [claveAbierta, setClaveAbierta] = useState<string>('');
-  const claveActual = `${abierto}-${inicial?.id ?? 'nuevo'}`;
-  if (abierto && claveAbierta !== claveActual) {
-    setClaveAbierta(claveActual);
+  // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
+  // el id, reabrir para otra alta nueva no refrescaba kmSugerido.
+  const [abiertoAntes, setAbiertoAntes] = useState(false);
+  if (abierto && !abiertoAntes) {
+    setAbiertoAntes(true);
     setB(borradorDesde(inicial, kmSugerido));
     setErrores({});
+  } else if (!abierto && abiertoAntes) {
+    setAbiertoAntes(false);
   }
 
   /**
@@ -139,10 +142,10 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
       titulo={inicial ? 'Editar service' : 'Nuevo service'}
       pie={
         <>
-          <Button ancho onClick={onCerrar}>
+          <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
             Guardar
           </Button>
         </>

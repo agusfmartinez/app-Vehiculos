@@ -16,6 +16,8 @@ interface Props {
   inicial?: LecturaTanque;
   kmSugerido: number;
   capacidadTanque?: number;
+  /** Última aguja conocida (carga o medición): punto de partida de una medición nueva. */
+  nivelSugerido?: number;
 }
 
 interface Borrador {
@@ -25,11 +27,16 @@ interface Borrador {
   nota: string;
 }
 
-function borradorDesde(l: LecturaTanque | undefined, kmSugerido: number): Borrador {
+function borradorDesde(
+  l: LecturaTanque | undefined,
+  kmSugerido: number,
+  nivelSugerido: number | undefined,
+): Borrador {
   return {
     fecha: l?.fecha ?? hoyISO(),
     km: l ? String(l.km) : kmSugerido ? String(kmSugerido) : '',
-    nivel: l?.nivel ?? 0.5,
+    // Arranca de la última aguja conocida en vez de un 50% arbitrario.
+    nivel: l?.nivel ?? nivelSugerido ?? 0.5,
     nota: l?.nota ?? '',
   };
 }
@@ -42,16 +49,20 @@ export function LecturaForm({
   inicial,
   kmSugerido,
   capacidadTanque,
+  nivelSugerido,
 }: Props) {
-  const [b, setB] = useState<Borrador>(() => borradorDesde(inicial, kmSugerido));
+  const [b, setB] = useState<Borrador>(() => borradorDesde(inicial, kmSugerido, nivelSugerido));
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const [claveAbierta, setClaveAbierta] = useState('');
-  const claveActual = `${abierto}-${inicial?.id ?? 'nuevo'}`;
-  if (abierto && claveAbierta !== claveActual) {
-    setClaveAbierta(claveActual);
-    setB(borradorDesde(inicial, kmSugerido));
+  // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
+  // el id, reabrir para otra medición nueva no refrescaba nivelSugerido.
+  const [abiertoAntes, setAbiertoAntes] = useState(false);
+  if (abierto && !abiertoAntes) {
+    setAbiertoAntes(true);
+    setB(borradorDesde(inicial, kmSugerido, nivelSugerido));
     setErrores({});
+  } else if (!abierto && abiertoAntes) {
+    setAbiertoAntes(false);
   }
 
   const validar = (): boolean => {
@@ -83,10 +94,10 @@ export function LecturaForm({
       titulo={inicial ? 'Editar medición' : 'Medir tanque'}
       pie={
         <>
-          <Button ancho onClick={onCerrar}>
+          <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
             Guardar
           </Button>
         </>

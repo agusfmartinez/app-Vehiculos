@@ -2,7 +2,7 @@ import { Fuel, Gauge } from 'lucide-react';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
-import { fmtNumero } from '@/lib/format';
+import { fmtFecha, fmtNumero } from '@/lib/format';
 import { NIVEL_RESERVA, enReserva, type EstadoTanque } from '@/lib/calculos';
 
 const MOTIVOS: Record<string, string> = {
@@ -21,7 +21,7 @@ interface Props {
 
 /** Cuánta nafta queda ahora, deducida del último nivel conocido y los km hechos. */
 export function TanqueCard({ estado, capacidad, onMedir }: Props) {
-  const { litros, nivel, autonomiaRestante, motivo } = estado;
+  const { litros, nivel, autonomiaRestante, referencia, kmDesdeReferencia, motivo } = estado;
 
   if (motivo) {
     return (
@@ -101,6 +101,14 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
             ~{fmtNumero(autonomiaRestante)} km
           </span>
         </div>
+
+        {referencia ? (
+          <p className="border-t border-carbon-700 pt-2 text-xs text-carbon-500">
+            Estimado desde {referencia.tipo === 'carga' ? 'la carga' : 'la medición'} del{' '}
+            {fmtFecha(referencia.fecha)} · {fmtNumero(kmDesdeReferencia)} km recorridos desde
+            entonces. Registrá una medición para corregirlo.
+          </p>
+        ) : null}
       </CardBody>
     </Card>
   );

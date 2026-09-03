@@ -219,6 +219,38 @@ export function DatosProvider({ children }: { children: ReactNode }) {
     [uid, data.vehiculos],
   );
 
+  /**
+   * Contracara de `sincronizarKm`: al borrar el registro que había subido el
+   * odómetro, éste se recalcula al récord que quede. Sólo actúa si el km
+   * borrado coincide exacto con el guardado en el vehículo — es la única
+   * señal segura de que ese número vino de este registro y no de una edición
+   * manual tuya, que no hay que tocar.
+   */
+  const desincronizarKm = useCallback(
+    (vehiculoId: string, kmBorrado: number, excluir: { coleccion: Coleccion; id: string }) => {
+      if (!db || !uid) return;
+      const vehiculo = data.vehiculos.find((v) => v.id === vehiculoId);
+      if (!vehiculo || kmBorrado !== vehiculo.kmActual) return;
+
+      const restantes = [
+        ...data.services.map((s) => ({ ...s, coleccion: 'services' as const })),
+        ...data.cargasCombustible.map((c) => ({ ...c, coleccion: 'cargas' as const })),
+        ...data.lecturasTanque.map((l) => ({ ...l, coleccion: 'lecturas' as const })),
+      ].filter(
+        (r) =>
+          r.vehiculoId === vehiculoId &&
+          !(r.coleccion === excluir.coleccion && r.id === excluir.id) &&
+          Number.isFinite(r.km) &&
+          r.km > 0,
+      );
+
+      const nuevoMax = restantes.length ? Math.max(...restantes.map((r) => r.km)) : 0;
+      if (nuevoMax === vehiculo.kmActual) return;
+      void guardarRegistro(db, uid, 'vehiculos', { ...vehiculo, kmActual: nuevoMax });
+    },
+    [uid, data.vehiculos, data.services, data.cargasCombustible, data.lecturasTanque],
+  );
+
   const value = useMemo<DatosContextValue>(() => {
     /** Escribe un registro, con el vehículo activo ya asociado. */
     const guardar = <T extends { id: string }>(nombre: Coleccion, registro: T) => {
@@ -296,15 +328,27 @@ export function DatosProvider({ children }: { children: ReactNode }) {
 
       agregarService: alta<SinIds<Service>>('services'),
       editarService: edicion<Service>('services'),
-      borrarService: (id) => borrar('services', id),
+      borrarService: (id) => {
+        const r = data.services.find((s) => s.id === id);
+        borrar('services', id);
+        if (r) desincronizarKm(r.vehiculoId, r.km, { coleccion: 'services', id });
+      },
 
       agregarCarga: alta<SinIds<CargaCombustible>>('cargas'),
       editarCarga: edicion<CargaCombustible>('cargas'),
-      borrarCarga: (id) => borrar('cargas', id),
+      borrarCarga: (id) => {
+        const r = data.cargasCombustible.find((c) => c.id === id);
+        borrar('cargas', id);
+        if (r) desincronizarKm(r.vehiculoId, r.km, { coleccion: 'cargas', id });
+      },
 
       agregarLectura: alta<SinIds<LecturaTanque>>('lecturas'),
       editarLectura: edicion<LecturaTanque>('lecturas'),
-      borrarLectura: (id) => borrar('lecturas', id),
+      borrarLectura: (id) => {
+        const r = data.lecturasTanque.find((l) => l.id === id);
+        borrar('lecturas', id);
+        if (r) desincronizarKm(r.vehiculoId, r.km, { coleccion: 'lecturas', id });
+      },
 
       agregarPoliza: alta<SinIds<Poliza>>('polizas'),
       editarPoliza: (p) => guardar('polizas', p),
@@ -338,6 +382,7 @@ export function DatosProvider({ children }: { children: ReactNode }) {
     kmMaxRegistrado,
     kmMinRegistrado,
     sincronizarKm,
+    desincronizarKm,
   ]);
 
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;

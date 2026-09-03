@@ -11,6 +11,7 @@ import { ConfirmarBorrado } from '@/components/ui/Modal';
 import {
   autonomiaPromedio,
   estadoTanque,
+  eventosTanque,
   gastoCombustibleMes,
   litrosPor100km,
   enReserva,
@@ -292,6 +293,19 @@ export function CombustiblePage() {
         : undefined,
     [ultimaCargaGlobal],
   );
+
+  /*
+   * Última aguja conocida (carga o medición, lo que sea más reciente): así
+   * una carga nueva arranca desde ahí en vez de desde cero. Se calcula sobre
+   * el historial completo, no el mes filtrado.
+   */
+  const nivelSugerido = useMemo(() => {
+    const eventos = eventosTanque(cargas, lecturas);
+    for (let i = eventos.length - 1; i >= 0; i--) {
+      if (eventos[i].nivelResultante != null) return eventos[i].nivelResultante!;
+    }
+    return undefined;
+  }, [cargas, lecturas]);
 
   const timeline = useMemo<ItemTimeline[]>(() => {
     const items: ItemTimeline[] = [
@@ -619,6 +633,7 @@ export function CombustiblePage() {
         kmSugerido={activo.kmActual}
         referencia={referencia}
         capacidadTanque={capacidad}
+        nivelSugerido={nivelSugerido}
         onGuardar={(c) => {
           if (c.id) editarCarga(c as CargaCombustible);
           else agregarCarga(c);
@@ -631,6 +646,7 @@ export function CombustiblePage() {
         inicial={editandoLectura}
         kmSugerido={activo.kmActual}
         capacidadTanque={capacidad}
+        nivelSugerido={nivelSugerido}
         onGuardar={(l) => {
           if (l.id) editarLectura(l as LecturaTanque);
           else agregarLectura(l);

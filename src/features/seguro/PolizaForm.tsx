@@ -50,12 +50,15 @@ export function PolizaForm({
   const [b, setB] = useState<Borrador>(() => borradorDesde(inicial, anterior));
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const [claveAbierta, setClaveAbierta] = useState('');
-  const claveActual = `${abierto}-${inicial?.id ?? 'nuevo'}`;
-  if (abierto && claveAbierta !== claveActual) {
-    setClaveAbierta(claveActual);
+  // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
+  // el id, reabrir para otra alta nueva no refrescaba "anterior".
+  const [abiertoAntes, setAbiertoAntes] = useState(false);
+  if (abierto && !abiertoAntes) {
+    setAbiertoAntes(true);
     setB(borradorDesde(inicial, anterior));
     setErrores({});
+  } else if (!abierto && abiertoAntes) {
+    setAbiertoAntes(false);
   }
 
   const set = (k: keyof Borrador) => (v: string) => setB((p) => ({ ...p, [k]: v }));
@@ -96,10 +99,10 @@ export function PolizaForm({
       titulo={inicial ? 'Editar póliza' : 'Nueva póliza'}
       pie={
         <>
-          <Button ancho onClick={onCerrar}>
+          <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
             Guardar
           </Button>
         </>

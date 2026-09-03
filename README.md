@@ -161,24 +161,27 @@ línea por tipo en vez de una sola: mezclar súper y premium en una serie hace v
 que no existen. Las cargas guardadas antes de que existiera este campo se agrupan aparte como
 "Sin especificar" — no se les asume un tipo.
 
-### La aguja antes de cargar es obligatoria
+### Las dos agujas y los litros están enlazados
 
-Toda carga pide **en qué nivel estaba la aguja antes de cargar**, incluso cargando por ticket. El
-nivel final no se pregunta: se calcula.
+Toda carga pide **la aguja antes de cargar** (obligatoria) y **la aguja después de cargar**, más
+los litros. No hay un modo "ticket" y otro "medidor": es un solo formulario, y los tres campos se
+retroalimentan.
 
-```
-nivelDespues = tanqueLleno ? 1 : min(1, nivelAntes + litros / capacidad)
-```
+- Escribir los **litros** mueve sola la aguja de después: `nivelAntes + litros / capacidad`.
+- Arrastrar la **aguja de después** recalcula los litros: `(nivelDespues − nivelAntes) × capacidad`.
 
-Sin ese dato, una carga parcial deja el tanque en un nivel desconocido: no sirve de referencia
-para el nivel actual ni de extremo para medir consumo, y obligaba a cargar dos registros (una
-medición y después la carga) para lo que es un solo evento.
+Gana el último que se toca. Cargar por ticket es escribir los litros y dejar que la aguja se
+posicione sola; cargar a ojo es arrastrar la aguja y dejar que los litros salgan de ahí. Los dos
+caminos llegan al mismo lugar: un nivel final conocido, sin checkbox de "tanque lleno" — sale
+solo de que la aguja de después haya llegado a F (`nivelDespues >= 0.999`).
 
-Esto da lo mejor de los dos modos: los **litros exactos del ticket** con un **nivel final
-conocido**. La única lectura de aguja es la previa, y su error queda acotado a media muesca.
+Sin la aguja previa, una carga parcial deja el tanque en un nivel desconocido: no sirve de
+referencia para el nivel actual ni de extremo para medir consumo, y obligaba a cargar dos
+registros (una medición y después la carga) para lo que es un solo evento.
 
-Marcar **"Tanque lleno"** sigue siendo el mejor caso: el nivel final es 1 porque cortó el
-surtidor, sin depender de la aguja, y dos cargas llenas seguidas dan un consumo exacto.
+La carga queda marcada `estimada` cuando el último campo tocado fue la aguja de después: ahí los
+litros son una aproximación de la capacidad declarada, no el número del ticket. Escribir los
+litros a mano, en cambio, los deja exactos aunque la aguja termine visualmente en F.
 
 ## Nivel del tanque y mediciones
 

@@ -56,13 +56,16 @@ export function VehiculoForm({ abierto, onCerrar, onGuardar, inicial }: Props) {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [autocompletado, setAutocompletado] = useState(false);
 
-  const [claveAbierta, setClaveAbierta] = useState('');
-  const claveActual = `${abierto}-${inicial?.id ?? 'nuevo'}`;
-  if (abierto && claveAbierta !== claveActual) {
-    setClaveAbierta(claveActual);
+  // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
+  // el id, reabrir para otra alta nueva no refrescaba el borrador.
+  const [abiertoAntes, setAbiertoAntes] = useState(false);
+  if (abierto && !abiertoAntes) {
+    setAbiertoAntes(true);
     setB(borradorDesde(inicial));
     setErrores({});
     setAutocompletado(false);
+  } else if (!abierto && abiertoAntes) {
+    setAbiertoAntes(false);
   }
 
   /**
@@ -133,10 +136,10 @@ export function VehiculoForm({ abierto, onCerrar, onGuardar, inicial }: Props) {
       titulo={inicial ? 'Editar vehículo' : 'Nuevo vehículo'}
       pie={
         <>
-          <Button ancho onClick={onCerrar}>
+          <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
             Guardar
           </Button>
         </>

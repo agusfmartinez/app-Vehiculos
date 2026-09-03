@@ -63,7 +63,16 @@ export function Modal({ abierto, onCerrar, titulo, children, pie }: ModalProps) 
         <div className="flex-1 overflow-y-auto px-4 py-4">{children}</div>
 
         {pie ? (
-          <footer className="safe-bottom flex gap-2 border-t border-carbon-700 bg-carbon-850 px-4 py-3">
+          <footer
+            className={cn(
+              'flex gap-2 border-t border-carbon-700 bg-carbon-850 px-3 pt-3',
+              // padding-bottom propio + el del área segura, sumados: si usara la
+              // clase .safe-bottom por separado, compite por la misma propiedad
+              // con py-3 y en los celus sin notch (env() = 0) puede ganar ella,
+              // dejando el pie sin padding inferior y los botones pegados al borde.
+              'pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]',
+            )}
+          >
             {pie}
           </footer>
         ) : null}
@@ -97,10 +106,10 @@ export function ConfirmarBorrado({
       titulo={titulo}
       pie={
         <>
-          <Button ancho onClick={onCancelar}>
+          <Button ancho tamanio="sm" onClick={onCancelar}>
             Cancelar
           </Button>
-          <Button ancho variante="peligro" onClick={onConfirmar}>
+          <Button ancho tamanio="sm" variante="peligro" onClick={onConfirmar}>
             {textoConfirmar}
           </Button>
         </>
