@@ -71,6 +71,31 @@ export function sugerirProximo(
   };
 }
 
+/**
+ * Igual que `sugerirProximo` pero para un service que agrupa varios trabajos
+ * (mismo presupuesto). Se queda con lo más próximo entre todos los tipos: si
+ * juntás aceite (10.000 km) con filtro de aire (20.000 km), el conjunto hay
+ * que volver a mirarlo a los 10.000, que es cuando el aceite ya lo pide.
+ */
+export function sugerirProximoMultiple(
+  tipos: string[],
+  km: number,
+  fecha: string,
+): SugerenciaProximo {
+  let proximoKm: number | undefined;
+  let proximaFecha: string | undefined;
+  for (const tipo of tipos) {
+    const s = sugerirProximo(tipo, km, fecha);
+    if (s.proximoKm != null && (proximoKm == null || s.proximoKm < proximoKm)) {
+      proximoKm = s.proximoKm;
+    }
+    if (s.proximaFecha && (proximaFecha == null || s.proximaFecha < proximaFecha)) {
+      proximaFecha = s.proximaFecha;
+    }
+  }
+  return { proximoKm, proximaFecha };
+}
+
 /** Texto corto del intervalo, para mostrar de dónde salió la sugerencia. */
 export function descripcionIntervalo(tipo: string): string | null {
   const i = intervaloDe(tipo);

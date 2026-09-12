@@ -4,7 +4,8 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const BASE_CAMPO =
@@ -126,6 +127,108 @@ export function Select({ label, hint, error, opciones, className, id, ...props }
           </option>
         ))}
       </select>
+    </Field>
+  );
+}
+
+interface SelectMultipleProps {
+  label: string;
+  hint?: ReactNode;
+  error?: string;
+  opciones: readonly { value: string; label: string }[];
+  valor: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}
+
+/** Desplegable con checkboxes: mismo look del Select simple, pero de varios. */
+export function SelectMultiple({
+  label,
+  hint,
+  error,
+  opciones,
+  valor,
+  onChange,
+  placeholder = 'Elegí uno o más',
+}: SelectMultipleProps) {
+  const id = useId();
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const cerrar = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    };
+    document.addEventListener('mousedown', cerrar);
+    return () => document.removeEventListener('mousedown', cerrar);
+  }, [abierto]);
+
+  const alternar = (v: string) =>
+    onChange(valor.includes(v) ? valor.filter((x) => x !== v) : [...valor, v]);
+
+  const texto = valor.length
+    ? opciones
+        .filter((o) => valor.includes(o.value))
+        .map((o) => o.label)
+        .join(', ')
+    : placeholder;
+
+  return (
+    <Field label={label} htmlFor={id} hint={hint} error={error}>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          id={id}
+          onClick={() => setAbierto((a) => !a)}
+          aria-expanded={abierto}
+          className={cn(
+            BASE_CAMPO,
+            'flex items-center justify-between gap-2 text-left',
+            error && 'border-rojo-500',
+            valor.length === 0 && 'text-carbon-500',
+          )}
+        >
+          <span className="truncate">{texto}</span>
+          <ChevronDown
+            size={16}
+            className={cn(
+              'shrink-0 text-carbon-400 transition-transform',
+              abierto && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {abierto ? (
+          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-carbon-600 bg-carbon-800 p-1 shadow-xl">
+            {opciones.map((o) => {
+              const activo = valor.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => alternar(o.value)}
+                  aria-pressed={activo}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
+                    activo ? 'text-ambar-300' : 'text-carbon-200 hover:bg-carbon-700',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      activo ? 'border-ambar-500 bg-ambar-500' : 'border-carbon-500',
+                    )}
+                  >
+                    {activo ? <Check size={11} className="text-carbon-950" strokeWidth={3} /> : null}
+                  </span>
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </Field>
   );
 }

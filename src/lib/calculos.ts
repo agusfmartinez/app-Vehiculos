@@ -72,6 +72,8 @@ export type Urgencia = 'ok' | 'proximo' | 'vencido';
 
 export interface AlertaService {
   service: Service;
+  /** A cuál de los trabajos del service corresponde esta alerta. */
+  tipo: string;
   urgencia: Urgencia;
   /** km que faltan para el próximo (negativo = pasado). */
   kmRestantes: number | null;
@@ -85,18 +87,22 @@ const UMBRAL_DIAS = 30;
 
 /**
  * Services con próximo km o próxima fecha cargados que ya vencieron o están
- * por vencer. Se queda con el registro más reciente de cada tipo para no
- * alertar por services viejos ya reemplazados por uno nuevo.
+ * por vencer. Un service puede agrupar varios trabajos (mismo presupuesto);
+ * se genera una alerta por cada uno, pero se queda con el registro más
+ * reciente que lo incluya, para no alertar por un tipo ya reemplazado por un
+ * service posterior.
  */
 export function alertasServices(services: Service[], kmActual: number): AlertaService[] {
   const masRecientePorTipo = new Map<string, Service>();
   for (const s of ordenarServicesDesc(services)) {
-    if (!masRecientePorTipo.has(s.tipo)) masRecientePorTipo.set(s.tipo, s);
+    for (const t of s.tipos) {
+      if (!masRecientePorTipo.has(t)) masRecientePorTipo.set(t, s);
+    }
   }
 
   const alertas: AlertaService[] = [];
 
-  for (const s of masRecientePorTipo.values()) {
+  for (const [tipo, s] of masRecientePorTipo) {
     if (s.proximoKm == null && !s.proximaFecha) continue;
 
     const kmRestantes = s.proximoKm != null ? s.proximoKm - kmActual : null;
@@ -133,6 +139,7 @@ export function alertasServices(services: Service[], kmActual: number): AlertaSe
 
     alertas.push({
       service: s,
+      tipo,
       urgencia,
       kmRestantes,
       diasRestantes,

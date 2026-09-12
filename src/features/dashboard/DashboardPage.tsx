@@ -95,11 +95,11 @@ export function DashboardPage() {
           <CardBody className="flex flex-col gap-2 pt-3">
             {r.alertas.map((a) => (
               <div
-                key={a.service.id}
+                key={`${a.service.id}-${a.tipo}`}
                 className="flex items-center justify-between gap-3 rounded-xl bg-carbon-850 px-3 py-2.5"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-carbon-100">{a.service.tipo}</p>
+                  <p className="truncate text-sm font-medium text-carbon-100">{a.tipo}</p>
                   <p className="num text-xs text-carbon-400">{a.detalle}</p>
                 </div>
                 <Badge tono={a.urgencia === 'vencido' ? 'peligro' : 'alerta'}>
@@ -231,7 +231,7 @@ export function DashboardPage() {
             {r.ultimoService ? (
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-carbon-100">
-                  {r.ultimoService.tipo}
+                  {r.ultimoService.tipos.join(' + ')}
                 </p>
                 <p className="num text-xs text-carbon-400">
                   {fmtFecha(r.ultimoService.fecha)} · {fmtKm(r.ultimoService.km)} ·{' '}

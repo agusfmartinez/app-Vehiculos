@@ -41,7 +41,8 @@ export interface Service {
   vehiculoId: string;
   fecha: string; // ISO date (YYYY-MM-DD)
   km: number;
-  tipo: string;
+  /** Uno o más trabajos hechos en la misma visita (mismo presupuesto/factura). */
+  tipos: string[];
   descripcion: string;
   costo: number;
   taller?: string;

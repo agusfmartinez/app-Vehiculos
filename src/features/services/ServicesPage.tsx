@@ -26,13 +26,13 @@ export function ServicesPage() {
   const [aBorrar, setABorrar] = useState<Service | null>(null);
 
   const tipos = useMemo(
-    () => Array.from(new Set(todos.map((s) => s.tipo))).sort(),
+    () => Array.from(new Set(todos.flatMap((s) => s.tipos))).sort(),
     [todos],
   );
 
   const lista = useMemo(() => {
     const ordenados = ordenarServicesDesc(todos);
-    return filtro === TODOS ? ordenados : ordenados.filter((s) => s.tipo === filtro);
+    return filtro === TODOS ? ordenados : ordenados.filter((s) => s.tipos.includes(filtro));
   }, [todos, filtro]);
 
   const idsAlertados = useMemo(() => {
@@ -102,7 +102,7 @@ export function ServicesPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="truncate text-sm font-semibold text-carbon-100">
-                          {s.tipo}
+                          {s.tipos.join(' + ')}
                         </h3>
                         <p className="num text-xs text-carbon-400">
                           {fmtFecha(s.fecha)} · {fmtNumero(s.km)} km
@@ -178,7 +178,7 @@ export function ServicesPage() {
         titulo="Borrar service"
         mensaje={
           aBorrar
-            ? `Se elimina "${aBorrar.tipo}" del ${fmtFecha(aBorrar.fecha)}. No se puede deshacer.`
+            ? `Se elimina "${aBorrar.tipos.join(' + ')}" del ${fmtFecha(aBorrar.fecha)}. No se puede deshacer.`
             : ''
         }
         onCancelar={() => setABorrar(null)}

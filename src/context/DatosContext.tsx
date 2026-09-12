@@ -37,6 +37,16 @@ type SinIds<T> = Omit<T, 'id' | 'vehiculoId'>;
 /** Marca que lo que había en este navegador ya se subió a alguna cuenta. */
 const CLAVE_MIGRADO = 'vehiculo-data-migrado-a-nube';
 
+/**
+ * Compatibilidad con services guardados antes de que `tipo` pasara a ser
+ * `tipos` (arreglo, para agrupar varios trabajos de un mismo presupuesto).
+ * No migra el documento en Firestore, sólo lo normaliza al leerlo.
+ */
+function normalizarService(s: Service & { tipo?: string }): Service {
+  if (Array.isArray(s.tipos) && s.tipos.length > 0) return s;
+  return { ...s, tipos: s.tipo ? [s.tipo] : [] };
+}
+
 interface DatosContextValue {
   data: VehiculoData;
   /** True mientras llega la primera respuesta de Firestore. */
@@ -169,7 +179,10 @@ export function DatosProvider({ children }: { children: ReactNode }) {
   const activoId = activo?.id ?? null;
 
   const services = useMemo(
-    () => (activoId ? data.services.filter((s) => s.vehiculoId === activoId) : []),
+    () =>
+      activoId
+        ? data.services.filter((s) => s.vehiculoId === activoId).map(normalizarService)
+        : [],
     [data.services, activoId],
   );
   const cargas = useMemo(
