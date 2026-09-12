@@ -58,26 +58,42 @@ export function Button({
   );
 }
 
-/** Botón flotante para el alta rápida en cada sección (pulgar, mobile). */
+const ESTILOS_FAB = {
+  primario: 'bg-ambar-500 text-carbon-950',
+  secundario: 'bg-carbon-700 text-carbon-100 border border-carbon-600',
+};
+
+/**
+ * Botón flotante para el alta rápida en cada sección (pulgar, mobile).
+ * `posicion` apila más de uno a la vez, contando desde abajo: 0 es el más
+ * cercano a la barra de navegación. El offset va como `style` en vez de una
+ * clase Tailwind más porque dos `bottom-[...]` en el mismo elemento compiten
+ * sin ganador garantizado.
+ */
 export function FabAgregar({
   onClick,
   label,
   icono,
+  variante = 'primario',
+  posicion = 0,
 }: {
   onClick: () => void;
   label: string;
   icono: ReactNode;
+  variante?: keyof typeof ESTILOS_FAB;
+  posicion?: number;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
+      style={{ bottom: `calc(5rem + env(safe-area-inset-bottom, 0px) + ${posicion * 4.25}rem)` }}
       className={cn(
-        'fixed right-4 z-30 flex h-14 items-center gap-2 rounded-full bg-ambar-500 px-5',
-        'font-semibold text-carbon-950 shadow-xl shadow-black/40 transition-transform',
+        'fixed right-4 z-30 flex h-14 items-center gap-2 rounded-full px-5',
+        'font-semibold shadow-xl shadow-black/40 transition-transform',
         'active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambar-300',
-        'bottom-[calc(5rem+env(safe-area-inset-bottom,0px))]',
+        ESTILOS_FAB[variante],
       )}
     >
       {icono}

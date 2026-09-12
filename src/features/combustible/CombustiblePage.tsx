@@ -1,5 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Fuel, Gauge, Info, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
 import { PageHeader } from '@/components/layout/AppShell';
@@ -168,6 +168,7 @@ export function CombustiblePage() {
     borrarLectura,
   } = useDatos();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [vista, setVista] = useState<Vista>('registros');
   const [periodo, setPeriodo] = useState<string>(TODOS);
@@ -177,6 +178,25 @@ export function CombustiblePage() {
   const [editandoCarga, setEditandoCarga] = useState<CargaCombustible | undefined>();
   const [editandoLectura, setEditandoLectura] = useState<LecturaTanque | undefined>();
   const [aBorrar, setABorrar] = useState<ItemTimeline | null>(null);
+
+  /*
+   * Atajo desde el tablero: llega con state.abrir = 'carga' | 'medicion' para
+   * abrir el formulario directo. Se limpia enseguida con replace, así un
+   * refresh o volver atrás no lo vuelve a disparar.
+   */
+  useEffect(() => {
+    const abrir = (location.state as { abrir?: 'carga' | 'medicion' } | null)?.abrir;
+    if (!abrir) return;
+    if (abrir === 'carga') {
+      setEditandoCarga(undefined);
+      setFormCarga(true);
+    } else {
+      setEditandoLectura(undefined);
+      setFormLectura(true);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const capacidad = activo?.capacidadTanque;
 

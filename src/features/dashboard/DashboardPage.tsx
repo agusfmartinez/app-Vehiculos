@@ -5,6 +5,8 @@ import {
   ChevronRight,
   Droplet,
   Fuel,
+  Gauge,
+  Plus,
   Route,
   ShieldCheck,
   TrendingUp,
@@ -15,6 +17,7 @@ import { useDatos } from '@/context/DatosContext';
 import { enReserva, estadoTanque, resumenDashboard, type EstadoVTV } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtKm, fmtNumero, textoDias } from '@/lib/format';
 import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
+import { FabAgregar } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/EmptyState';
 import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
 import { VehiculoCard } from '@/features/dashboard/VehiculoCard';
@@ -247,6 +250,25 @@ export function DashboardPage() {
           </CardBody>
         </Card>
       </Link>
+
+      {/*
+       * Atajos de nafta desde el tablero: van a Combustible con el formulario
+       * correspondiente ya abierto, en vez de obligar a entrar y buscar el
+       * botón de ahí. El estado de navegación se limpia al leerlo, así un
+       * refresh o volver atrás no reabre el modal solo.
+       */}
+      <FabAgregar
+        onClick={() => navigate('/combustible', { state: { abrir: 'medicion' } })}
+        label="Medir"
+        icono={<Gauge size={20} />}
+        variante="secundario"
+        posicion={1}
+      />
+      <FabAgregar
+        onClick={() => navigate('/combustible', { state: { abrir: 'carga' } })}
+        label="Carga"
+        icono={<Plus size={20} />}
+      />
     </div>
   );
 }
