@@ -644,6 +644,13 @@ export function CombustiblePage() {
         </>
       )}
 
+      <FabAgregar
+        onClick={abrirLectura}
+        label="Medir"
+        icono={<Gauge size={20} />}
+        variante="secundario"
+        posicion={1}
+      />
       <FabAgregar onClick={abrirCarga} label="Carga" icono={<Plus size={20} />} />
 
       <CargaForm
