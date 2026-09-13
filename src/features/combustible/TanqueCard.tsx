@@ -21,7 +21,8 @@ interface Props {
 
 /** Cuánta nafta queda ahora, deducida del último nivel conocido y los km hechos. */
 export function TanqueCard({ estado, capacidad, onMedir }: Props) {
-  const { litros, nivel, autonomiaRestante, referencia, kmDesdeReferencia, motivo } = estado;
+  const { litros, nivel, autonomiaRestante, autonomiaReserva, referencia, kmDesdeReferencia, motivo } =
+    estado;
 
   if (motivo) {
     return (
@@ -101,6 +102,18 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
             ~{fmtNumero(autonomiaRestante)} km
           </span>
         </div>
+
+        {autonomiaReserva != null && autonomiaReserva > 0 ? (
+          <p className="-mt-1.5 text-right text-xs text-carbon-500">
+            {enReserva(nivel) ? (
+              'Ya estás consumiendo la reserva'
+            ) : (
+              <>
+                <span className="num font-medium text-rojo-500">{fmtNumero(autonomiaReserva)} km reserva</span>{' '}
+              </>
+            )}
+          </p>
+        ) : null}
 
         {referencia ? (
           <p className="border-t border-carbon-700 pt-2 text-xs text-carbon-500">

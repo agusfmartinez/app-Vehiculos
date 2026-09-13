@@ -174,7 +174,9 @@ export function DashboardPage() {
                 }
                 detalle={
                   tanque.autonomiaRestante != null
-                    ? `Alcanza ~${fmtNumero(tanque.autonomiaRestante)} km`
+                    ? tanque.autonomiaReserva
+                      ? `~${fmtNumero(tanque.autonomiaRestante)} km · ${fmtNumero(tanque.autonomiaReserva)} km en reserva`
+                      : `Alcanza ~${fmtNumero(tanque.autonomiaRestante)} km`
                     : 'Registrá una medición del tanque'
                 }
               />

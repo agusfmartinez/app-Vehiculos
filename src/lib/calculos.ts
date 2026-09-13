@@ -315,8 +315,12 @@ export interface EstadoTanque {
   litros: number | null;
   /** 0..1, para dibujar la aguja. */
   nivel: number | null;
-  /** Km que todavía se pueden hacer con lo que queda. */
+  /** Km que todavía se pueden hacer con lo que queda (total, reserva incluida). */
   autonomiaRestante: number | null;
+  /** De esos km, cuántos son antes de entrar en la reserva. */
+  autonomiaHastaReserva: number | null;
+  /** De esos km, cuántos ya son de la reserva (no recomendable consumirlos). */
+  autonomiaReserva: number | null;
   /** Km recorridos desde el último nivel conocido. */
   kmDesdeReferencia: number | null;
   referencia: EventoTanque | null;
@@ -328,6 +332,8 @@ const SIN_ESTADO = (motivo: MotivoSinTanque): EstadoTanque => ({
   litros: null,
   nivel: null,
   autonomiaRestante: null,
+  autonomiaHastaReserva: null,
+  autonomiaReserva: null,
   kmDesdeReferencia: null,
   referencia: null,
   motivo,
@@ -376,10 +382,17 @@ export function estadoTanque(entrada: {
 
   const litros = Math.min(capacidad, Math.max(0, litrosEnReferencia + cargadoDespues - consumido));
 
+  // La reserva (1 raya del medidor) no es para consumirla: se separa del resto.
+  const litrosReserva = capacidad * NIVEL_RESERVA;
+  const litrosHastaReserva = Math.max(0, litros - litrosReserva);
+  const litrosEnReserva = litros - litrosHastaReserva;
+
   return {
     litros,
     nivel: litros / capacidad,
     autonomiaRestante: litros * kmPorLitro,
+    autonomiaHastaReserva: litrosHastaReserva * kmPorLitro,
+    autonomiaReserva: litrosEnReserva * kmPorLitro,
     kmDesdeReferencia,
     referencia,
     motivo: null,
