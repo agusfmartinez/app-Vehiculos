@@ -4,6 +4,7 @@ App web para llevar el mantenimiento, las cargas de combustible, el seguro y la 
 varios vehículos**. Solo frontend, **sin servidor propio**: se entra con una cuenta de Google y
 los datos se guardan en Cloud Firestore, sincronizados entre todos los dispositivos de cada
 usuario. También se pueden exportar/importar como archivo JSON.
+![alt text](public/img/cuentakm.webp)
 
 ## Stack
 
