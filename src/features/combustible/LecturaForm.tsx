@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Info } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { NivelTanque } from '@/features/combustible/NivelTanque';
-import { hoyISO } from '@/lib/format';
-import type { LecturaTanque } from '@/types';
+import { previsualizarMedicion } from '@/lib/calculos';
+import { fmtNumero, hoyISO } from '@/lib/format';
+import type { CargaCombustible, LecturaTanque } from '@/types';
 
 interface Props {
   abierto: boolean;
@@ -18,6 +19,9 @@ interface Props {
   capacidadTanque?: number;
   /** Última aguja conocida (carga o medición): punto de partida de una medición nueva. */
   nivelSugerido?: number;
+  /** Para avisar antes de guardar si esta medición va a dar "tramo corto". */
+  cargas: CargaCombustible[];
+  promedioKmPorLitro?: number | null;
 }
 
 interface Borrador {
@@ -50,9 +54,30 @@ export function LecturaForm({
   kmSugerido,
   capacidadTanque,
   nivelSugerido,
+  cargas,
+  promedioKmPorLitro,
 }: Props) {
   const [b, setB] = useState<Borrador>(() => borradorDesde(inicial, kmSugerido, nivelSugerido));
   const [errores, setErrores] = useState<Record<string, string>>({});
+
+  // Prueba el tramo ANTES de guardar: si va a quedar corto para medir, mejor
+  // avisar acá que dejar que el usuario lo descubra después en la lista.
+  const previa = useMemo(
+    () => previsualizarMedicion(cargas, [], capacidadTanque, { km: Number(b.km), nivel: b.nivel }),
+    [cargas, capacidadTanque, b.km, b.nivel],
+  );
+  // La aguja quedó igual o arriba de la carga: sin una carga real en el medio
+  // eso no puede pasar, así que ni se deja guardar (a diferencia del "bajó
+  // poco", que es un dato válido aunque no alcance para medir consumo). Chequea
+  // el signo directo, no el descarte: si el margen es chico cae en
+  // 'bajo-resolucion', si es grande en 'implausible' — los dos son el mismo
+  // problema acá.
+  const agujaSubio = previa != null && previa.litrosConsumidos <= 0;
+  const tramoCorto = !agujaSubio && previa?.descarte === 'bajo-resolucion' ? previa : null;
+  const kmFaltantes =
+    tramoCorto?.litrosFaltantes != null && promedioKmPorLitro
+      ? Math.round(tramoCorto.litrosFaltantes * promedioKmPorLitro)
+      : null;
 
   // Repobla en cada apertura (ver comentario en CargaForm): si sólo mirara
   // el id, reabrir para otra medición nueva no refrescaba nivelSugerido.
@@ -70,6 +95,9 @@ export function LecturaForm({
     if (!b.fecha) e.fecha = 'Poné la fecha de la medición.';
     const km = Number(b.km);
     if (!b.km || !Number.isFinite(km) || km < 0) e.km = 'Kilometraje inválido.';
+    if (agujaSubio) {
+      e.nivel = 'No puede quedar igual o arriba de la última carga sin una carga real en el medio.';
+    }
     setErrores(e);
     return Object.keys(e).length === 0;
   };
@@ -97,7 +125,7 @@ export function LecturaForm({
           <Button ancho tamanio="sm" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button ancho tamanio="sm" variante="primario" onClick={guardar}>
+          <Button ancho tamanio="sm" variante="primario" onClick={guardar} disabled={agujaSubio}>
             Guardar
           </Button>
         </>
@@ -136,6 +164,7 @@ export function LecturaForm({
             valor={b.nivel}
             onChange={(v) => setB((p) => ({ ...p, nivel: v }))}
             capacidad={capacidadTanque}
+            error={errores.nivel}
           />
         </div>
 
@@ -143,6 +172,28 @@ export function LecturaForm({
           <p className="text-xs text-carbon-500">
             Cargá la capacidad del tanque en la ficha del vehículo para ver el equivalente en
             litros y poder calcular el consumo entre mediciones.
+          </p>
+        ) : null}
+
+        {agujaSubio ? (
+          <p className="flex items-start gap-1.5 rounded-lg bg-rojo-500/10 px-2 py-1.5 text-xs text-rojo-500">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>
+              Esta aguja queda igual o por encima de como cerró la última carga — sin una carga real
+              en el medio, eso no puede pasar. Bajala hasta que quede claramente por debajo para
+              poder guardar.
+            </span>
+          </p>
+        ) : tramoCorto ? (
+          <p className="flex items-start gap-1.5 rounded-lg bg-rojo-500/10 px-2 py-1.5 text-xs text-rojo-500">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>
+              Con esta aguja va a quedar "tramo corto": desde la última carga se calcula recién cada{' '}
+              {fmtNumero(tramoCorto.litrosFaltantes! + tramoCorto.litrosConsumidos, 1)} L. Te faltan
+              ~{fmtNumero(tramoCorto.litrosFaltantes!, 1)} L
+              {kmFaltantes != null ? ` (unos ${fmtNumero(kmFaltantes)} km más)` : ''} para que esta
+              medición dé un consumo confiable. Igual se puede guardar.
+            </span>
           </p>
         ) : null}
 

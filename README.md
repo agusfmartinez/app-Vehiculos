@@ -116,6 +116,21 @@ seguridad sean cortas y difíciles de equivocar.
 Las claves `VITE_FIREBASE_*` son públicas por diseño: identifican al proyecto, no dan permisos.
 Lo único que protege los datos son las reglas.
 
+### Desarrollo sin tocar los datos de prod
+
+Con sólo `.env.local`, `npm run dev` habla con el Firebase real: cualquier alta/borrado de prueba
+se mete entre los vehículos de verdad. Para separarlo:
+
+1. Repetir los pasos de arriba con un segundo proyecto (ej. `cuentakm-dev`) — mismas reglas,
+   mismo Google habilitado.
+2. Copiar [`.env.development.local.example`](.env.development.local.example) a
+   `.env.development.local` y completar con las credenciales de ESE proyecto.
+
+Vite carga `.env.development.local` sólo con `npm run dev`, con prioridad sobre `.env.local` —
+así el local siempre pega contra el proyecto de dev, sin tocar nada a mano cada vez, y
+`npm run build` / Vercel siguen usando el de prod. Iniciás sesión con tu misma cuenta de Google,
+pero como es un proyecto distinto arrancás sin datos: cargás lo que necesites para probar.
+
 ### Las reglas
 
 ```

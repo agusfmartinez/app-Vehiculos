@@ -416,13 +416,18 @@ export interface TramoConsumo {
   hasta: EventoTanque;
   kmRecorridos: number;
   litrosConsumidos: number;
-  /** null cuando el tramo no da una medición utilizable. */
+  /** null cuando el tramo no da una medición utilizable (ver `descarte`). */
   kmPorLitro: number | null;
   precision: PrecisionTramo;
   /** Cargas intermedias que no dejaron nivel conocido pero suman litros. */
   cargasIntermedias: number;
-  /** Por qué queda fuera del promedio; null si el tramo sirve. */
+  /** Por qué queda fuera del promedio; null si el tramo cuenta para el cálculo. */
   descarte: MotivoDescarte | null;
+  /**
+   * Sólo con descarte 'bajo-resolucion': litros que le faltan a este tramo
+   * para volverse medible (la próxima vez que la aguja baje una muesca más).
+   */
+  litrosFaltantes: number | null;
 }
 
 /**
@@ -520,9 +525,24 @@ function construirTramo(
   const comun = { desde, hasta, kmRecorridos, litrosConsumidos, cargasIntermedias };
 
   // La aguja se lee de a muescas: un consumo menor a una muesca es ruido del
-  // instrumento, no una medición.
-  if (!exacto && Math.abs(litrosConsumidos) < resolucionMedidor(capacidad!)) {
-    return { ...comun, kmPorLitro: null, precision: 'estimado', descarte: 'bajo-resolucion' };
+  // instrumento, no una medición confiable. Si los DOS extremos salen de la
+  // aguja (nadie llenó el tanque en el medio), el error de lectura de cada uno
+  // se suma al del otro, así que hace falta el doble de muescas para confiar
+  // en el dato: con una sola muesca de por medio, un tramo corto puede dar
+  // cualquier rendimiento (positivo Y sin sentido) según de qué lado cayó el
+  // redondeo de cada aguja — no es "un dato de baja precisión", es directamente
+  // ruido, así que ni se calcula: se guarda cuánto falta para el próximo dato
+  // confiable en vez de un número que puede ser cualquier cosa.
+  const ambasAgujas = desde.nivelDeMedidor && hasta.nivelDeMedidor;
+  const umbral = resolucionMedidor(capacidad!) * (ambasAgujas ? 2 : 1);
+  if (!exacto && Math.abs(litrosConsumidos) < umbral) {
+    return {
+      ...comun,
+      kmPorLitro: null,
+      precision: 'estimado',
+      descarte: 'bajo-resolucion',
+      litrosFaltantes: umbral - Math.abs(litrosConsumidos),
+    };
   }
 
   if (litrosConsumidos <= 0) {
@@ -534,6 +554,7 @@ function construirTramo(
       kmPorLitro: kmRecorridos / litrosConsumidos,
       precision: 'estimado',
       descarte: 'implausible',
+      litrosFaltantes: null,
     };
   }
 
@@ -543,6 +564,7 @@ function construirTramo(
     kmPorLitro,
     precision: exacto ? 'exacto' : 'estimado',
     descarte: esPlausible(kmPorLitro) ? null : 'implausible',
+    litrosFaltantes: null,
   };
 }
 
@@ -605,32 +627,102 @@ function indicesAncla(eventos: EventoTanque[], incluirMediciones: boolean): numb
     .filter((i) => i >= 0);
 }
 
+export interface ProgresoMedicion {
+  /** Tramo desde la última carga conocida hasta esta medición: el dato confiable. */
+  desdeCarga: TramoConsumo | null;
+  /** Km desde el registro inmediatamente anterior (otra medición), sólo de contexto. */
+  kmDesdeAnterior: number;
+  /** True si no hay una medición intermedia que mostrar aparte (el anterior YA es la carga). */
+  sinIntermedia: boolean;
+}
+
 /**
- * Paso de cada medición contra el evento inmediatamente anterior, sea una carga
- * u otra medición.
- *
- * No es la medición de referencia — esa es de carga a carga — pero muestra cómo
- * viene el consumo dentro del ciclo: cuántos kilómetros y litros van desde el
- * último registro. Sólo se calcula para mediciones: las cargas se comparan
- * entre sí.
+ * Progreso de cada medición dentro de su ciclo: cuánto se consumió desde la
+ * última carga (la referencia confiable, con más km de base) y, aparte, cuánto
+ * pasó desde el registro inmediato anterior (sólo para dar contexto de cuándo
+ * fue la última vez que se miró el tanque — sin inventarle un km/L a un tramo
+ * corto entre dos mediciones).
  */
-export function pasosMedicion(
+export function progresoMediciones(
   cargas: CargaCombustible[],
   lecturas: LecturaTanque[],
   capacidad?: number,
-): Map<string, TramoConsumo> {
+): Map<string, ProgresoMedicion> {
   const eventos = eventosTanque(cargas, lecturas);
   const anclas = indicesAncla(eventos, true);
-  const pasos = new Map<string, TramoConsumo>();
+  const progreso = new Map<string, ProgresoMedicion>();
 
   for (let k = 1; k < anclas.length; k++) {
     const iHasta = anclas[k];
     if (eventos[iHasta].tipo !== 'lectura') continue;
-    const tramo = construirTramo(eventos, anclas[k - 1], iHasta, capacidad);
-    if (tramo) pasos.set(eventos[iHasta].id, tramo);
+
+    const iAnterior = anclas[k - 1];
+
+    let iCarga = -1;
+    for (let i = iHasta; i >= 0; i--) {
+      if (eventos[i].tipo === 'carga' && eventos[i].nivelResultante != null) {
+        iCarga = i;
+        break;
+      }
+    }
+
+    // Sin ninguna carga registrada todavía, no hay mejor referencia que el
+    // paso contra el anterior: se cae al comportamiento viejo.
+    const iBase = iCarga >= 0 ? iCarga : iAnterior;
+    const desdeCarga = construirTramo(eventos, iBase, iHasta, capacidad);
+
+    progreso.set(eventos[iHasta].id, {
+      desdeCarga,
+      kmDesdeAnterior: eventos[iHasta].km - eventos[iAnterior].km,
+      sinIntermedia: iAnterior === iBase,
+    });
   }
 
-  return pasos;
+  return progreso;
+}
+
+/**
+ * Prueba, ANTES de guardar, el tramo que daría una medición nueva contra la
+ * última carga con nivel conocido — la misma referencia que usa
+ * `progresoMediciones` una vez guardada. Sirve para avisar en el formulario si
+ * va a quedar "tramo corto" en vez de que el usuario lo descubra después.
+ * Null si no hay con qué compararla (nunca se cargó nafta, o falta capacidad).
+ */
+export function previsualizarMedicion(
+  cargas: CargaCombustible[],
+  lecturas: LecturaTanque[],
+  capacidad: number | undefined,
+  borrador: { km: number; nivel: number },
+): TramoConsumo | null {
+  if (!capacidad || capacidad <= 0) return null;
+  if (!Number.isFinite(borrador.km) || borrador.km <= 0) return null;
+  if (!Number.isFinite(borrador.nivel)) return null;
+
+  const eventos = eventosTanque(cargas, lecturas);
+  let iCarga = -1;
+  for (let i = eventos.length - 1; i >= 0; i--) {
+    if (
+      eventos[i].tipo === 'carga' &&
+      eventos[i].nivelResultante != null &&
+      eventos[i].km <= borrador.km
+    ) {
+      iCarga = i;
+      break;
+    }
+  }
+  if (iCarga < 0) return null;
+
+  const sintetico: EventoTanque = {
+    id: '__previsualizacion__',
+    km: borrador.km,
+    fecha: '',
+    tipo: 'lectura',
+    litrosCargados: 0,
+    nivelResultante: borrador.nivel,
+    nivelDeMedidor: true,
+  };
+
+  return construirTramo([...eventos.slice(0, iCarga + 1), sintetico], iCarga, iCarga + 1, capacidad);
 }
 
 export type BaseConsumo = 'cargas' | 'mediciones';

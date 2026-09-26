@@ -26,3 +26,4 @@ pnpm-debug.log*
 # Variables de entorno con las credenciales de Firebase
 .env
 .env.local
+.env.*.local

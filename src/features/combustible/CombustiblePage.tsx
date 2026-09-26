@@ -15,7 +15,7 @@ import {
   gastoCombustibleMes,
   litrosPor100km,
   enReserva,
-  pasosMedicion,
+  progresoMediciones,
   precioPromedioPorLitro,
   resolucionMedidor,
   tramosConsumo,
@@ -71,20 +71,14 @@ type ItemTimeline =
 
 /** Los tres números del tramo: rendimiento, distancia y litros. */
 function BadgeTramo({ tramo }: { tramo: TramoConsumo }) {
-  if (tramo.descarte === 'bajo-resolucion') {
-    return (
-      <>
-        <Badge>Tramo corto</Badge>
-        <Badge>{fmtNumero(tramo.kmRecorridos)} km recorridos</Badge>
-      </>
-    );
-  }
-
   return (
     <>
-      <Badge tono={tramo.descarte === 'implausible' ? 'peligro' : 'ok'}>
-        {fmtNumero(tramo.kmPorLitro, 2)} km/L
-      </Badge>
+      {tramo.kmPorLitro != null ? (
+        <Badge tono={tramo.descarte === 'implausible' ? 'peligro' : 'ok'}>
+          {fmtNumero(tramo.kmPorLitro, 2)} km/L
+        </Badge>
+      ) : null}
+      {tramo.descarte === 'bajo-resolucion' ? <Badge>Tramo corto</Badge> : null}
       <Badge>{fmtNumero(tramo.kmRecorridos)} km recorridos</Badge>
       <Badge>{fmtNumero(tramo.litrosConsumidos, 2)} L consumidos</Badge>
       {tramo.cargasIntermedias > 0 ? (
@@ -97,15 +91,48 @@ function BadgeTramo({ tramo }: { tramo: TramoConsumo }) {
 }
 
 /** Explica por qué el tramo no entra en el promedio. */
-function AvisoDescarte({ tramo, capacidad }: { tramo: TramoConsumo; capacidad?: number }) {
+function AvisoDescarte({
+  tramo,
+  capacidad,
+  promedio,
+}: {
+  tramo: TramoConsumo;
+  capacidad?: number;
+  promedio?: number | null;
+}) {
   if (tramo.descarte === 'bajo-resolucion') {
+    const ambasAgujas = tramo.desde.nivelDeMedidor && tramo.hasta.nivelDeMedidor;
+    const umbralTexto = capacidad
+      ? `${fmtNumero(resolucionMedidor(capacidad) * (ambasAgujas ? 2 : 1), 1)} L`
+      : 'una muesca';
+
+    // La aguja quedó igual o por encima de la referencia: dentro del margen de
+    // error de la lectura no se sabe si "subió" o simplemente no bajó nada
+    // todavía — es distinto de "bajó poco", que sí tiene cuánto le falta.
+    if (tramo.litrosConsumidos <= 0) {
+      return (
+        <p className="flex items-start gap-1.5 text-xs text-carbon-500">
+          <Info size={13} className="mt-0.5 shrink-0" />
+          La aguja está igual o por encima de como quedó la referencia — dentro del margen de error
+          de la lectura, no de una carga real en el medio. Se calcula recién cuando baje al menos{' '}
+          {umbralTexto} por debajo de esa referencia.
+        </p>
+      );
+    }
+
+    const kmFaltantes =
+      tramo.litrosFaltantes != null && promedio ? Math.round(tramo.litrosFaltantes * promedio) : null;
     return (
       <p className="flex items-start gap-1.5 text-xs text-carbon-500">
         <Info size={13} className="mt-0.5 shrink-0" />
-        Muy pocos kilómetros para medir consumo: la aguja se mueve de a{' '}
-        {capacidad ? `${fmtNumero(resolucionMedidor(capacidad), 1)} L` : 'una muesca'} y en{' '}
-        {fmtNumero(tramo.kmRecorridos)} km no llegó a bajar tanto. El dato está bien, no alcanza
-        para calcular.
+        Tramo corto para medir consumo, se calcula cada {umbralTexto}.{' '}
+        {tramo.litrosFaltantes != null ? (
+          <>
+            Te faltan ~{fmtNumero(tramo.litrosFaltantes, 1)} L
+            {kmFaltantes != null ? ` (unos ${fmtNumero(kmFaltantes)} km más)` : ''} para el próximo
+            dato confiable.
+          </>
+        ) : null}
       </p>
     );
   }
@@ -239,9 +266,10 @@ export function CombustiblePage() {
     [cargas, lecturas, capacidad],
   );
 
-  // …y las mediciones, el paso contra el registro inmediatamente anterior.
-  const pasos = useMemo(
-    () => pasosMedicion(cargas, lecturas, capacidad),
+  // …y las mediciones, el progreso desde la última carga (más confiable) y
+  // aparte, sólo de contexto, cuánto pasó desde la medición anterior.
+  const progresos = useMemo(
+    () => progresoMediciones(cargas, lecturas, capacidad),
     [cargas, lecturas, capacidad],
   );
 
@@ -519,7 +547,7 @@ export function CombustiblePage() {
               {timeline.slice(0, visibles).map((item) => {
                 if (item.clase === 'lectura') {
                   const l = item.lectura;
-                  const paso = pasos.get(l.id);
+                  const progreso = progresos.get(l.id);
 
                   return (
                     <li key={item.id}>
@@ -550,13 +578,25 @@ export function CombustiblePage() {
                             </span>
                           </div>
 
-                          {paso ? (
+                          {progreso?.desdeCarga ? (
                             <div className="flex flex-wrap items-center gap-2">
-                              <BadgeTramo tramo={paso} />
+                              <BadgeTramo tramo={progreso.desdeCarga} />
                             </div>
                           ) : null}
 
-                          {paso ? <AvisoDescarte tramo={paso} capacidad={capacidad} /> : null}
+                          {progreso?.desdeCarga ? (
+                            <AvisoDescarte
+                              tramo={progreso.desdeCarga}
+                              capacidad={capacidad}
+                              promedio={autonomia.kmPorLitro}
+                            />
+                          ) : null}
+
+                          {progreso && !progreso.sinIntermedia ? (
+                            <p className="text-xs text-carbon-500">
+                              +{fmtNumero(progreso.kmDesdeAnterior)} km desde la medición anterior
+                            </p>
+                          ) : null}
 
                           {l.nota ? <p className="text-sm text-carbon-300">{l.nota}</p> : null}
 
@@ -615,7 +655,9 @@ export function CombustiblePage() {
                           </div>
                         ) : null}
 
-                        {ciclo ? <AvisoDescarte tramo={ciclo} capacidad={capacidad} /> : null}
+                        {ciclo ? (
+                          <AvisoDescarte tramo={ciclo} capacidad={capacidad} promedio={autonomia.kmPorLitro} />
+                        ) : null}
 
                         <AccionesItem
                           onEditar={() => {
@@ -674,6 +716,8 @@ export function CombustiblePage() {
         kmSugerido={activo.kmActual}
         capacidadTanque={capacidad}
         nivelSugerido={nivelSugerido}
+        cargas={cargas}
+        promedioKmPorLitro={autonomia.kmPorLitro}
         onGuardar={(l) => {
           if (l.id) editarLectura(l as LecturaTanque);
           else agregarLectura(l);

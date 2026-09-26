@@ -106,16 +106,16 @@ export function TanqueCard({ estado, capacidad, onMedir }: Props) {
         {autonomiaReserva != null && autonomiaReserva > 0 ? (
           <p className="-mt-1.5 text-right text-xs text-carbon-500">
             {enReserva(nivel) ? (
-              'Ya estás consumiendo la reserva'
+              <span className="font-medium text-rojo-500">Ya estás consumiendo la reserva</span>
             ) : (
-              <>
-                <span className="num font-medium text-rojo-500">{fmtNumero(autonomiaReserva)} km reserva</span>{' '}
-              </>
+              <span className="num font-medium text-rojo-500">
+                {fmtNumero(autonomiaReserva)} km reserva
+              </span>
             )}
           </p>
         ) : null}
 
-        {referencia ? (
+        {referencia && kmDesdeReferencia != null && kmDesdeReferencia > 0 ? (
           <p className="border-t border-carbon-700 pt-2 text-xs text-carbon-500">
             Estimado desde {referencia.tipo === 'carga' ? 'la carga' : 'la medición'} del{' '}
             {fmtFecha(referencia.fecha)} · {fmtNumero(kmDesdeReferencia)} km recorridos desde
