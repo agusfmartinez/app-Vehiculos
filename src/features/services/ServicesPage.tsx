@@ -113,6 +113,23 @@ export function ServicesPage() {
                       </span>
                     </div>
 
+                    {s.repuestos?.length || s.manoDeObra ? (
+                      <ul className="flex flex-col gap-0.5 text-sm text-carbon-300">
+                        {s.repuestos?.map((r, i) => (
+                          <li key={i} className="flex justify-between gap-3">
+                            <span className="min-w-0 truncate">{r.nombre}</span>
+                            <span className="num shrink-0 text-carbon-400">{fmtDinero(r.costo)}</span>
+                          </li>
+                        ))}
+                        {s.manoDeObra ? (
+                          <li className="flex justify-between gap-3">
+                            <span>Mano de obra</span>
+                            <span className="num shrink-0 text-carbon-400">{fmtDinero(s.manoDeObra)}</span>
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+
                     {s.descripcion ? (
                       <p className="text-sm text-carbon-300">{s.descripcion}</p>
                     ) : null}

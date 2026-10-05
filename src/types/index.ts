@@ -36,6 +36,11 @@ export interface Vehiculo {
   color?: string;
 }
 
+export interface Repuesto {
+  nombre: string;
+  costo: number;
+}
+
 export interface Service {
   id: string;
   vehiculoId: string;
@@ -44,7 +49,10 @@ export interface Service {
   /** Uno o más trabajos hechos en la misma visita (mismo presupuesto/factura). */
   tipos: string[];
   descripcion: string;
+  /** Total del service. Con desglose = repuestos + mano de obra; sin él, el monto cargado a mano. */
   costo: number;
+  repuestos?: Repuesto[];
+  manoDeObra?: number;
   taller?: string;
   proximoKm?: number;
   proximaFecha?: string;

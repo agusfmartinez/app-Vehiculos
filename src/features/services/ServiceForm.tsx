@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { RotateCcw, Sparkles } from 'lucide-react';
+import { Plus, RotateCcw, Sparkles, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input, SelectMultiple, Textarea } from '@/components/ui/Input';
 import { descripcionIntervalo, sugerirProximoMultiple } from '@/data/intervalos';
-import { hoyISO } from '@/lib/format';
+import { fmtDinero, hoyISO } from '@/lib/format';
 import { TIPOS_SERVICE, type Service } from '@/types';
 
 interface Props {
@@ -16,6 +16,13 @@ interface Props {
   kmSugerido: number;
 }
 
+interface RepuestoBorrador {
+  nombre: string;
+  costo: string;
+}
+
+const num = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
 interface Borrador {
   fecha: string;
   km: string;
@@ -23,7 +30,10 @@ interface Borrador {
   tipos: string[];
   tipoOtro: string;
   descripcion: string;
-  costo: string;
+  repuestos: RepuestoBorrador[];
+  manoDeObra: string;
+  /** Resto del costo de services viejos cargados con un total sin desglose. */
+  sinDesglose: string;
   taller: string;
   proximoKm: string;
   proximaFecha: string;
@@ -42,6 +52,18 @@ function separarTipos(tipos: string[]): { conocidos: string[]; otro: string } {
   return { conocidos, otro: otros.join(', ') };
 }
 
+/** Services viejos tienen sólo `costo`: lo que no cubre el desglose se conserva aparte. */
+function sinDesgloseDe(s: Service | undefined): string {
+  if (!s) return '';
+  const desglosado = (s.repuestos ?? []).reduce((a, r) => a + r.costo, 0) + (s.manoDeObra ?? 0);
+  const resto = Math.round((s.costo - desglosado) * 100) / 100;
+  return resto > 0 ? String(resto) : '';
+}
+
+function totalDe(b: Borrador): number {
+  return b.repuestos.reduce((a, r) => a + num(r.costo), 0) + num(b.manoDeObra) + num(b.sinDesglose);
+}
+
 function borradorDesde(s: Service | undefined, kmSugerido: number): Borrador {
   const { conocidos, otro } = s ? separarTipos(s.tipos) : { conocidos: [], otro: '' };
   const tipos = s ? (otro ? [...conocidos, 'Otro'] : conocidos) : [];
@@ -54,7 +76,9 @@ function borradorDesde(s: Service | undefined, kmSugerido: number): Borrador {
     tipos,
     tipoOtro: otro,
     descripcion: s?.descripcion ?? '',
-    costo: s ? String(s.costo) : '',
+    repuestos: (s?.repuestos ?? []).map((r) => ({ nombre: r.nombre, costo: String(r.costo) })),
+    manoDeObra: s?.manoDeObra ? String(s.manoDeObra) : '',
+    sinDesglose: sinDesgloseDe(s),
     taller: s?.taller ?? '',
     proximoKm: s?.proximoKm != null ? String(s.proximoKm) : '',
     proximaFecha: s?.proximaFecha ?? '',
@@ -119,15 +143,23 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
       };
     });
 
-  const validar = (): boolean => {
+  const editarRepuesto = (i: number, cambios: Partial<RepuestoBorrador>) =>
+    setB((p) => ({
+      ...p,
+      repuestos: p.repuestos.map((r, j) => (j === i ? { ...r, ...cambios } : r)),
+    }));
+
+  const validar =(): boolean => {
     const e: Record<string, string> = {};
     if (!b.fecha) e.fecha = 'Poné la fecha del service.';
     const km = Number(b.km);
     if (!b.km || !Number.isFinite(km) || km < 0) e.km = 'Kilometraje inválido.';
     if (tiposFinales(b).length === 0) e.tipos = 'Elegí al menos un trabajo.';
     if (b.tipos.includes('Otro') && !b.tipoOtro.trim()) e.tipoOtro = 'Escribí de qué se trata.';
-    const costo = Number(b.costo);
-    if (b.costo !== '' && (!Number.isFinite(costo) || costo < 0)) e.costo = 'Costo inválido.';
+    const invalido = (v: string) => v !== '' && (!Number.isFinite(Number(v)) || Number(v) < 0);
+    if (b.repuestos.some((r) => invalido(r.costo))) e.repuestos = 'Hay un precio de repuesto inválido.';
+    if (invalido(b.manoDeObra)) e.manoDeObra = 'Costo inválido.';
+    if (invalido(b.sinDesglose)) e.sinDesglose = 'Costo inválido.';
     const proximoKm = Number(b.proximoKm);
     if (b.proximoKm && Number.isFinite(proximoKm) && proximoKm <= km) {
       e.proximoKm = 'Tiene que ser mayor al km del service.';
@@ -139,6 +171,10 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
   const guardar = () => {
     if (!validar()) return;
     const proximoKm = Number(b.proximoKm);
+    const repuestos = b.repuestos
+      .map((r) => ({ nombre: r.nombre.trim(), costo: num(r.costo) }))
+      .filter((r) => r.nombre || r.costo > 0)
+      .map((r) => ({ ...r, nombre: r.nombre || 'Repuesto' }));
     onGuardar({
       id: inicial?.id,
       vehiculoId: inicial?.vehiculoId,
@@ -146,7 +182,9 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
       km: Number(b.km),
       tipos: tiposFinales(b),
       descripcion: b.descripcion.trim(),
-      costo: Number(b.costo) || 0,
+      costo: totalDe(b),
+      repuestos: repuestos.length > 0 ? repuestos : undefined,
+      manoDeObra: num(b.manoDeObra) > 0 ? num(b.manoDeObra) : undefined,
       taller: b.taller.trim() || undefined,
       proximoKm: b.proximoKm && Number.isFinite(proximoKm) && proximoKm > 0 ? proximoKm : undefined,
       proximaFecha: b.proximaFecha || undefined,
@@ -216,28 +254,98 @@ export function ServiceForm({ abierto, onCerrar, onGuardar, inicial, kmSugerido 
           label="Descripción"
           value={b.descripcion}
           onChange={(e) => setB((p) => ({ ...p, descripcion: e.target.value }))}
-          placeholder="Detalle de repuestos, marca del aceite, observaciones…"
+          placeholder="Marca del aceite, observaciones…"
         />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-2 rounded-xl border border-carbon-600 bg-carbon-850 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-carbon-400">
+            Costos
+          </p>
+
+          {b.repuestos.map((r, i) => (
+            <div key={i} className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <Input
+                  label={`Repuesto ${i + 1}`}
+                  value={r.nombre}
+                  onChange={(e) => editarRepuesto(i, { nombre: e.target.value })}
+                  placeholder="Ej: Filtro de aceite"
+                />
+              </div>
+              <div className="w-32 shrink-0">
+                <Input
+                  label="Precio"
+                  mono
+                  type="number"
+                  inputMode="decimal"
+                  prefijo="$"
+                  value={r.costo}
+                  onChange={(e) => editarRepuesto(i, { costo: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <Button
+                variante="fantasma"
+                tamanio="sm"
+                aria-label={`Quitar repuesto ${i + 1}`}
+                icono={<X size={14} />}
+                className="shrink-0 px-2"
+                onClick={() => setB((p) => ({ ...p, repuestos: p.repuestos.filter((_, j) => j !== i) }))}
+              />
+            </div>
+          ))}
+          {errores.repuestos ? <p className="text-xs text-rojo-500">{errores.repuestos}</p> : null}
+
+          <Button
+            variante="fantasma"
+            tamanio="sm"
+            icono={<Plus size={14} />}
+            className="self-start"
+            onClick={() =>
+              setB((p) => ({ ...p, repuestos: [...p.repuestos, { nombre: '', costo: '' }] }))
+            }
+          >
+            Agregar repuesto
+          </Button>
+
           <Input
-            label="Costo"
+            label="Mano de obra"
             mono
             type="number"
             inputMode="decimal"
             prefijo="$"
-            value={b.costo}
-            onChange={(e) => setB((p) => ({ ...p, costo: e.target.value }))}
+            value={b.manoDeObra}
+            onChange={(e) => setB((p) => ({ ...p, manoDeObra: e.target.value }))}
             placeholder="0"
-            error={errores.costo}
+            error={errores.manoDeObra}
           />
-          <Input
-            label="Taller"
-            value={b.taller}
-            onChange={(e) => setB((p) => ({ ...p, taller: e.target.value }))}
-            placeholder="Opcional"
-          />
+
+          {b.sinDesglose ? (
+            <Input
+              label="Costo sin desglosar"
+              hint="Monto cargado antes de separar repuestos y mano de obra"
+              mono
+              type="number"
+              inputMode="decimal"
+              prefijo="$"
+              value={b.sinDesglose}
+              onChange={(e) => setB((p) => ({ ...p, sinDesglose: e.target.value }))}
+              error={errores.sinDesglose}
+            />
+          ) : null}
+
+          <div className="flex items-center justify-between border-t border-carbon-700 pt-2">
+            <span className="text-sm text-carbon-300">Total</span>
+            <span className="num text-base font-bold text-ambar-400">{fmtDinero(totalDe(b))}</span>
+          </div>
         </div>
+
+        <Input
+          label="Taller"
+          value={b.taller}
+          onChange={(e) => setB((p) => ({ ...p, taller: e.target.value }))}
+          placeholder="Opcional"
+        />
 
         <div className="rounded-xl border border-carbon-600 bg-carbon-850 p-3">
           <div className="mb-3 flex items-start justify-between gap-2">
