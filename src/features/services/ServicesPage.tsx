@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
+import { Building2, ChevronDown, Pencil, Plus, Trash2, Wrench } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
 import { PageHeader } from '@/components/layout/AppShell';
 import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
@@ -16,6 +16,54 @@ import { ServiceForm } from '@/features/services/ServiceForm';
 import type { Service } from '@/types';
 
 const TODOS = '__todos__';
+
+/** Repuestos plegados bajo un subtotal; la mano de obra queda siempre visible. */
+function DesgloseCostos({ repuestos, manoDeObra }: Pick<Service, 'repuestos' | 'manoDeObra'>) {
+  const [abierto, setAbierto] = useState(false);
+  if (!repuestos?.length && !manoDeObra) return null;
+
+  const totalRepuestos = (repuestos ?? []).reduce((a, r) => a + r.costo, 0);
+
+  return (
+    <div className="flex flex-col gap-0.5 text-sm text-carbon-300">
+      {repuestos?.length ? (
+        <>
+          <button
+            type="button"
+            aria-expanded={abierto}
+            onClick={() => setAbierto((v) => !v)}
+            className="flex items-center justify-between gap-3 rounded text-left hover:text-carbon-100"
+          >
+            <span className="flex items-center gap-1">
+              <ChevronDown
+                size={14}
+                className={cn('shrink-0 transition-transform', abierto && 'rotate-180')}
+              />
+              Total repuestos ({repuestos.length})
+            </span>
+            <span className="num shrink-0 text-carbon-400">{fmtDinero(totalRepuestos)}</span>
+          </button>
+          {abierto ? (
+            <ul className="flex flex-col gap-0.5 border-l border-carbon-700 pl-3 text-carbon-400">
+              {repuestos.map((r, i) => (
+                <li key={i} className="flex justify-between gap-3">
+                  <span className="min-w-0 truncate">{r.nombre}</span>
+                  <span className="num shrink-0">{fmtDinero(r.costo)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+      {manoDeObra ? (
+        <div className="flex justify-between gap-3">
+          <span>Mano de obra</span>
+          <span className="num shrink-0 text-carbon-400">{fmtDinero(manoDeObra)}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function ServicesPage() {
   const { services: todos, activo, agregarService, editarService, borrarService } = useDatos();
@@ -113,22 +161,7 @@ export function ServicesPage() {
                       </span>
                     </div>
 
-                    {s.repuestos?.length || s.manoDeObra ? (
-                      <ul className="flex flex-col gap-0.5 text-sm text-carbon-300">
-                        {s.repuestos?.map((r, i) => (
-                          <li key={i} className="flex justify-between gap-3">
-                            <span className="min-w-0 truncate">{r.nombre}</span>
-                            <span className="num shrink-0 text-carbon-400">{fmtDinero(r.costo)}</span>
-                          </li>
-                        ))}
-                        {s.manoDeObra ? (
-                          <li className="flex justify-between gap-3">
-                            <span>Mano de obra</span>
-                            <span className="num shrink-0 text-carbon-400">{fmtDinero(s.manoDeObra)}</span>
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : null}
+                    <DesgloseCostos repuestos={s.repuestos} manoDeObra={s.manoDeObra} />
 
                     {s.descripcion ? (
                       <p className="text-sm text-carbon-300">{s.descripcion}</p>
