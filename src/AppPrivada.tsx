@@ -8,6 +8,7 @@ import { ServicesPage } from '@/features/services/ServicesPage';
 import { CombustiblePage } from '@/features/combustible/CombustiblePage';
 import { SeguroPage } from '@/features/seguro/SeguroPage';
 import { VtvPage } from '@/features/vtv/VtvPage';
+import { KilometrajePage } from '@/features/kilometraje/KilometrajePage';
 
 /**
  * Espera a que llegue el primer snapshot real de Firestore antes de mostrar
@@ -26,6 +27,7 @@ function Enrutado() {
         <Route path="/vehiculo" element={<VehiculoPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/combustible" element={<CombustiblePage />} />
+        <Route path="/kilometros" element={<KilometrajePage />} />
         <Route path="/seguro" element={<SeguroPage />} />
         <Route path="/vtv" element={<VtvPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
