@@ -40,6 +40,7 @@ export function VehiculoPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
+        volver
         titulo="Vehículos"
         subtitulo={`${vehiculos.length} ${vehiculos.length === 1 ? 'vehículo' : 'vehículos'} cargados`}
         accion={

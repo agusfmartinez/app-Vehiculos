@@ -1,7 +1,6 @@
-import { Link } from 'react-router-dom';
 import { Car, ChevronRight, Gauge } from 'lucide-react';
 import { useDatos } from '@/context/DatosContext';
-import { Card } from '@/components/ui/Card';
+import { CardLink } from '@/components/ui/Card';
 import { fmtNumero } from '@/lib/format';
 
 /**
@@ -17,8 +16,7 @@ export function VehiculoCard() {
   const nombre = [activo.marca, activo.modelo].filter(Boolean).join(' ');
 
   return (
-    <Link to="/vehiculo" className="block">
-      <Card className="relative overflow-hidden border-carbon-600 bg-gradient-to-b from-carbon-800 to-carbon-850 transition-colors hover:border-carbon-500">
+    <CardLink to="/vehiculo" flecha={false} className="overflow-hidden bg-gradient-to-b from-carbon-800 to-carbon-850">
         <div className="p-5">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -60,7 +58,6 @@ export function VehiculoCard() {
             </span>
           </div>
         </div>
-      </Card>
-    </Link>
+    </CardLink>
   );
 }

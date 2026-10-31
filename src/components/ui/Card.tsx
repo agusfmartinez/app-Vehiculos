@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface CardProps {
@@ -16,6 +18,40 @@ export function Card({ children, className }: CardProps) {
     >
       {children}
     </div>
+  );
+}
+
+interface CardLinkProps extends CardProps {
+  to: string;
+  /** Flecha en la esquina. Apagala si la tarjeta ya trae la suya. */
+  flecha?: boolean;
+}
+
+/**
+ * Tarjeta que lleva a otra pantalla. Se distingue de las informativas por el
+ * borde ámbar, la flecha y el efecto al apretar: sin eso, tocar una tarjeta
+ * parece no hacer nada y nadie descubre que navega.
+ */
+export function CardLink({ to, flecha = true, children, className }: CardLinkProps) {
+  return (
+    <Link to={to} className="group block">
+      <Card
+        className={cn(
+          'relative h-full border-ambar-500/30 transition duration-150',
+          'group-hover:border-ambar-500/70 group-active:scale-[0.98]',
+          flecha && '[&>div]:pr-7',
+          className,
+        )}
+      >
+        {children}
+        {flecha ? (
+          <ChevronRight
+            size={16}
+            className="absolute right-2.5 top-3.5 text-ambar-400/70 transition-transform group-hover:translate-x-0.5 group-hover:text-ambar-400"
+          />
+        ) : null}
+      </Card>
+    </Link>
   );
 }
 

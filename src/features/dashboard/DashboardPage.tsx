@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ChevronRight,
@@ -16,7 +16,7 @@ import {
 import { useDatos } from '@/context/DatosContext';
 import { enReserva, estadoTanque, resumenDashboard, type EstadoVTV } from '@/lib/calculos';
 import { fmtDinero, fmtFecha, fmtKm, fmtNumero, textoDias } from '@/lib/format';
-import { Card, CardBody, CardHeader, Stat } from '@/components/ui/Card';
+import { Card, CardBody, CardHeader, CardLink, Stat } from '@/components/ui/Card';
 import { FabAgregar } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/EmptyState';
 import { SinVehiculo } from '@/components/layout/SelectorVehiculo';
@@ -112,8 +112,7 @@ export function DashboardPage() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3">
-        <Link to="/vtv" className="block">
-          <Card className="h-full transition-colors hover:border-carbon-600">
+        <CardLink to="/vtv">
             <CardBody>
               <Stat
                 rotulo="VTV"
@@ -136,27 +135,25 @@ export function DashboardPage() {
                 }
               />
             </CardBody>
-          </Card>
-        </Link>
+        </CardLink>
 
-        <Card>
-          <CardBody>
-            <Stat
-              rotulo="Distancia registrada"
-              icono={<Route size={13} />}
-              valor={recorrido ? fmtNumero(recorrido.km) : '—'}
-              unidad={recorrido ? 'km' : undefined}
-              detalle={
-                recorrido
-                  ? `Desde los ${fmtNumero(recorrido.desde)} km`
-                  : 'Necesita 2 registros con km'
-              }
-            />
-          </CardBody>
-        </Card>
+        <CardLink to="/kilometros">
+            <CardBody>
+              <Stat
+                rotulo="Distancia registrada"
+                icono={<Route size={13} />}
+                valor={recorrido ? fmtNumero(recorrido.km) : '—'}
+                unidad={recorrido ? 'km' : undefined}
+                detalle={
+                  recorrido
+                    ? `Desde los ${fmtNumero(recorrido.desde)} km`
+                    : 'Necesita 2 registros con km'
+                }
+              />
+            </CardBody>
+        </CardLink>
 
-        <Link to="/combustible" className="block">
-          <Card className="h-full transition-colors hover:border-carbon-600">
+        <CardLink to="/combustible">
             <CardBody>
               <Stat
                 rotulo="Nafta en tanque"
@@ -181,8 +178,7 @@ export function DashboardPage() {
                 }
               />
             </CardBody>
-          </Card>
-        </Link>
+        </CardLink>
 
         <Card>
           <CardBody>
@@ -226,8 +222,7 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <Link to="/services" className="block">
-        <Card className="transition-colors hover:border-carbon-600">
+      <CardLink to="/services" flecha={false}>
           <CardHeader titulo="Último service" icono={<Wrench size={13} />} />
           <CardBody className="flex items-center justify-between gap-3 pt-2">
             {r.ultimoService ? (
@@ -248,10 +243,9 @@ export function DashboardPage() {
             ) : (
               <p className="text-sm text-carbon-400">Todavía no cargaste ningún service.</p>
             )}
-            <ChevronRight size={18} className="shrink-0 text-carbon-500" />
+            <ChevronRight size={18} className="shrink-0 text-ambar-400/70" />
           </CardBody>
-        </Card>
-      </Link>
+      </CardLink>
 
       {/*
        * Atajos de nafta desde el tablero: van a Combustible con el formulario
