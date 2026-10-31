@@ -131,6 +131,7 @@ export function PolizaForm({
           mono
           type="number"
           inputMode="decimal"
+          step="0.01"
           prefijo="$"
           value={b.monto}
           onChange={(e) => set('monto')(e.target.value)}

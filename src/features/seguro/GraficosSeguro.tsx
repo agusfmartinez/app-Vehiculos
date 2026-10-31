@@ -92,7 +92,7 @@ export function GraficosSeguro({ puntos }: Props) {
                 domain={['dataMin - 1000', 'dataMax + 1000']}
               />
               <Tooltip
-                content={<TooltipSeguro formato={(v) => fmtDinero(v)} />}
+                content={<TooltipSeguro formato={(v) => fmtDinero(v, 2)} />}
                 cursor={{ stroke: '#474d58' }}
               />
               <Line

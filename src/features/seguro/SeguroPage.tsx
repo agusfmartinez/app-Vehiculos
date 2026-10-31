@@ -206,7 +206,7 @@ export function SeguroPage() {
                 <Stat
                   rotulo="Cuota actual"
                   icono={<ShieldHalf size={13} />}
-                  valor={fmtDinero(ultima?.monto)}
+                  valor={fmtDinero(ultima?.monto, 2)}
                   compacto
                   tono="acento"
                   detalle={
@@ -220,7 +220,7 @@ export function SeguroPage() {
                 <Stat
                   rotulo={`Total ${anioTotal}`}
                   icono={<TrendingUp size={13} />}
-                  valor={fmtDinero(total)}
+                  valor={fmtDinero(total, 2)}
                   compacto
                   detalle={
                     acumulado
@@ -257,7 +257,7 @@ export function SeguroPage() {
                             </p>
                           </div>
                           <span className="num shrink-0 text-base font-bold text-ambar-400">
-                            {fmtDinero(poliza.monto)}
+                            {fmtDinero(poliza.monto, 2)}
                           </span>
                         </div>
 
@@ -268,7 +268,7 @@ export function SeguroPage() {
                               icono={subio ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                             >
                               {subio ? '+' : '−'}
-                              {fmtDinero(Math.abs(variacion))}
+                              {fmtDinero(Math.abs(variacion), 2)}
                               {variacionPct != null
                                 ? ` (${fmtNumero(Math.abs(variacionPct), 1)} %)`
                                 : ''}
@@ -325,9 +325,9 @@ export function SeguroPage() {
                       <Stat
                         rotulo="Cuota promedio"
                         icono={<BarChart3 size={13} />}
-                        valor={fmtDinero(reporte.promedio)}
+                        valor={fmtDinero(reporte.promedio, 2)}
                         compacto
-                        detalle={`${reporte.meses} ${reporte.meses === 1 ? 'mes' : 'meses'} · total ${fmtDinero(reporte.total)}`}
+                        detalle={`${reporte.meses} ${reporte.meses === 1 ? 'mes' : 'meses'} · total ${fmtDinero(reporte.total, 2)}`}
                       />
                     </CardBody>
                   </Card>
